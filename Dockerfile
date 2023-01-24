@@ -24,6 +24,8 @@ cd checklist_vikunja &&\
 mage build:clean && \
 mage release:xgo $TARGETOS/$TARGETARCH/$TARGETVARIANT
 
+RUN echo ============= Finish Step 1 =============
+
 ###################
 # The actual image
 # Note: I wanted to use the scratch image here, but unfortunatly the go-sqlite bindings require cgo and
