@@ -3,6 +3,10 @@
 # Build stage
 FROM golang:1-alpine3.12 AS build-env
 
+RUN \
+  go install github.com/magefile/mage@latest && \
+  mv /go/bin/mage /usr/local/go/bin
+
 ARG VIKUNJA_VERSION
 ENV TAGS "sqlite"
 ENV GO111MODULE=on
