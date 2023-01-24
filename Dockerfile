@@ -1,7 +1,8 @@
 
 ##############
 # Build stage
-FROM --platform=linux/amd64 techknowlogick/xgo:go-1.19.2 AS build-env
+FROM --platform=windows/amd64 techknowlogick/xgo:go-1.19.2 AS build-env
+RUN go version
 
 ENV TARGETOS=linux
 ENV TARGETARCH=amd64
@@ -17,7 +18,6 @@ RUN \
 COPY . /go/src/code.vikunja.io/api
 WORKDIR /go/src/code.vikunja.io/api
 
-RUN go version
 
 # ARG TARGETOS TARGETARCH TARGETVARIANT
 # Checkout version if set
