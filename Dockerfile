@@ -17,7 +17,7 @@ RUN \
 COPY . /go/src/code.vikunja.io/api
 WORKDIR /go/src/code.vikunja.io/api
 
-RUN echo {RUN go version}
+RUN go version
 
 # ARG TARGETOS TARGETARCH TARGETVARIANT
 # Checkout version if set
