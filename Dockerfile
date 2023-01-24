@@ -1,33 +1,33 @@
 
 ##############
 # Build stage
-FROM --platform=$BUILDPLATFORM techknowlogick/xgo:go-1.19.2 AS build-env
-
-RUN \
-  go install github.com/magefile/mage@latest && \
-  mv /go/bin/mage /usr/local/go/bin
+FROM golang:1-alpine3.12 AS build-env
 
 ARG VIKUNJA_VERSION
+ENV TAGS "sqlite"
+ENV GO111MODULE=on
+
+# Build deps
+RUN apk --no-cache add build-base git
 
 # Setup repo
-COPY . /go/src/code.vikunja.io/api
+COPY . go/src/code.vikunja.io/api
 WORKDIR /go/src/code.vikunja.io/api
 
-ARG TARGETOS TARGETARCH TARGETVARIANT
 # Checkout version if set
-RUN if [ -n "${VIKUNJA_VERSION}" ]; then git checkout "${VIKUNJA_VERSION}"; fi && \
-  mage build:clean && \
-  mage release:xgo $TARGETOS/$TARGETARCH/$TARGETVARIANT
+RUN git clone https://diamonddev107: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@github.com/Axe-LLC/dental_checklist_app_backend && \
+cd dental_checklist_app_backend &&\
+mage build:clean build
 
 ###################
 # The actual image
 # Note: I wanted to use the scratch image here, but unfortunatly the go-sqlite bindings require cgo and
 # because of this, the container would not start when I compiled the image without cgo.
-FROM alpine:3.16
+FROM alpine:3.12
 LABEL maintainer="maintainers@vikunja.io"
 
 WORKDIR /app/vikunja/
-COPY --from=build-env /build/vikunja-* vikunja
+COPY --from=build-env /go/src/code.vikunja.io/api/vikunja .
 ENV VIKUNJA_SERVICE_ROOTPATH=/app/vikunja/
 
 # Dynamic permission changing stuff
@@ -39,7 +39,7 @@ RUN apk --no-cache add shadow && \
   chown vikunja -R /app/vikunja
 COPY run.sh /run.sh
 
-# Add time zone data
+# Fix time zone settings not working
 RUN apk --no-cache add tzdata
 
 # Files permissions
