@@ -1,8 +1,7 @@
 
 ##############
 # Build stage
-FROM --platform=windows/amd64 techknowlogick/xgo:go-1.19.2 AS build-env
-RUN go version
+FROM --platform=linux/amd64 techknowlogick/xgo:go-1.19.2 AS build-env
 
 ENV TARGETOS=linux
 ENV TARGETARCH=amd64
@@ -18,7 +17,6 @@ RUN \
 COPY . /go/src/code.vikunja.io/api
 WORKDIR /go/src/code.vikunja.io/api
 
-
 # ARG TARGETOS TARGETARCH TARGETVARIANT
 # Checkout version if set
 
@@ -27,7 +25,6 @@ cd checklist_vikunja &&\
 mage build:clean && \
 mage release:xgo linux/amd64
 
-RUN echo ============= Finish Step 3 =============
 
 ###################
 # The actual image
