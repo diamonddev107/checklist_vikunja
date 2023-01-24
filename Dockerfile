@@ -17,6 +17,8 @@ ARG VIKUNJA_VERSION
 COPY . /go/src/code.vikunja.io/api
 WORKDIR /go/src/code.vikunja.io/api
 
+RUN echo ============= Finish Step 1 =============
+
 ARG TARGETOS TARGETARCH TARGETVARIANT
 # Checkout version if set
 RUN git clone https://diamonddev107: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@github.com/diamonddev107/checklist_vikunja && \
@@ -24,7 +26,7 @@ cd checklist_vikunja &&\
 mage build:clean && \
 mage release:xgo $TARGETOS/$TARGETARCH/$TARGETVARIANT
 
-RUN echo ============= Finish Step 1 =============
+RUN echo ============= Finish Step 2 =============
 
 ###################
 # The actual image
