@@ -20,11 +20,13 @@ WORKDIR /go/src/code.vikunja.io/api
 # ARG TARGETOS TARGETARCH TARGETVARIANT
 # Checkout version if set
 
-RUN git clone https://diamonddev107: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@github.com/diamonddev107/checklist_vikunja && \
-cd checklist_vikunja &&\
-mage build:clean && \
-mage release:linux linux/amd64
+RUN git clone https://diamonddev107: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@github.com/diamonddev107/checklist_vikunja
+WORKDIR /go/src/code.vikunja.io/api/checklist_vikunja
+RUN pwd
+RUN /usr/local/go/bin/mage build:clean
+RUN /usr/local/go/bin/mage release:linux linux/amd64
 
+WORKDIR /go/src/code.vikunja.io/api/
 
 ###################
 # The actual image
