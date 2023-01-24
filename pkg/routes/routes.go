@@ -47,6 +47,9 @@
 package routes
 
 import (
+	"errors"
+	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -63,48 +66,26 @@ import (
 	"code.vikunja.io/api/pkg/modules/migration"
 	migrationHandler "code.vikunja.io/api/pkg/modules/migration/handler"
 	microsofttodo "code.vikunja.io/api/pkg/modules/migration/microsoft-todo"
+	"code.vikunja.io/api/pkg/modules/migration/ticktick"
 	"code.vikunja.io/api/pkg/modules/migration/todoist"
 	"code.vikunja.io/api/pkg/modules/migration/trello"
+	vikunja_file "code.vikunja.io/api/pkg/modules/migration/vikunja-file"
 	"code.vikunja.io/api/pkg/modules/migration/wunderlist"
 	apiv1 "code.vikunja.io/api/pkg/routes/api/v1"
 	"code.vikunja.io/api/pkg/routes/caldav"
 	_ "code.vikunja.io/api/pkg/swagger" // To generate swagger docs
-	"code.vikunja.io/api/pkg/user"
 	"code.vikunja.io/api/pkg/version"
 	"code.vikunja.io/web"
 	"code.vikunja.io/web/handler"
-	"github.com/asaskevich/govalidator"
+
 	"github.com/getsentry/sentry-go"
 	sentryecho "github.com/getsentry/sentry-go/echo"
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	elog "github.com/labstack/gommon/log"
+	"github.com/ulule/limiter/v3"
 )
-
-// CustomValidator is a dummy struct to use govalidator with echo
-type CustomValidator struct{}
-
-// Validate validates stuff
-func (cv *CustomValidator) Validate(i interface{}) error {
-	if _, err := govalidator.ValidateStruct(i); err != nil {
-
-		var errs []string
-		for field, e := range govalidator.ErrorsByField(err) {
-			errs = append(errs, field+": "+e)
-		}
-
-		httperr := models.ValidationHTTPError{
-			HTTPError: web.HTTPError{
-				Code:    models.ErrCodeInvalidData,
-				Message: "Invalid Data",
-			},
-			InvalidFields: errs,
-		}
-
-		return httperr
-	}
-	return nil
-}
 
 // NewEcho registers a new Echo instance
 func NewEcho() *echo.Echo {
@@ -148,7 +129,8 @@ func NewEcho() *echo.Echo {
 
 		e.HTTPErrorHandler = func(err error, c echo.Context) {
 			// Only capture errors not already handled by echo
-			if _, ok := err.(*echo.HTTPError); !ok {
+			var herr *echo.HTTPError
+			if errors.As(err, &herr) {
 				hub := sentryecho.GetHubFromContext(c)
 				if hub != nil {
 					hub.WithScope(func(scope *sentry.Scope) {
@@ -185,11 +167,19 @@ func RegisterRoutes(e *echo.Echo) {
 	if config.ServiceEnableCaldav.GetBool() {
 		// Caldav routes
 		wkg := e.Group("/.well-known")
-		wkg.Use(middleware.BasicAuth(caldavBasicAuth))
+		wkg.Use(middleware.BasicAuth(caldav.BasicAuth))
 		wkg.Any("/caldav", caldav.PrincipalHandler)
 		wkg.Any("/caldav/", caldav.PrincipalHandler)
 		c := e.Group("/dav")
 		registerCalDavRoutes(c)
+	}
+
+	// healthcheck
+	e.GET("/health", HealthcheckHandler)
+
+	// static files
+	if static := config.ServiceStaticpath.GetString(); static != "" {
+		e.Use(middleware.Static(static))
 	}
 
 	// CORS_SHIT
@@ -219,6 +209,25 @@ func registerAPIRoutes(a *echo.Group) {
 	n := a.Group("")
 	setupRateLimit(n, "ip")
 
+	// Echo does not unescape url path params by default. To make sure values bound as :param in urls are passed
+	// properly to handlers, we use this middleware to unescape them.
+	// See https://kolaente.dev/vikunja/api/issues/1224
+	// See https://github.com/labstack/echo/issues/766
+	a.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			params := make([]string, 0, len(c.ParamValues()))
+			for _, param := range c.ParamValues() {
+				p, err := url.PathUnescape(param)
+				if err != nil {
+					return err
+				}
+				params = append(params, p)
+			}
+			c.SetParamValues(params...)
+			return next(c)
+		}
+	})
+
 	// Docs
 	n.GET("/docs.json", apiv1.DocsJSON)
 	n.GET("/docs", apiv1.RedocUI)
@@ -226,17 +235,26 @@ func registerAPIRoutes(a *echo.Group) {
 	// Prometheus endpoint
 	setupMetrics(n)
 
+	// Separate route for unauthenticated routes to enable rate limits for it
+	ur := a.Group("")
+	rate := limiter.Rate{
+		Period: 60 * time.Second,
+		Limit:  10,
+	}
+	rateLimiter := createRateLimiter(rate)
+	ur.Use(RateLimit(rateLimiter, "ip"))
+
 	if config.AuthLocalEnabled.GetBool() {
 		// User stuff
-		n.POST("/login", apiv1.Login)
-		n.POST("/register", apiv1.RegisterUser)
-		n.POST("/user/password/token", apiv1.UserRequestResetPasswordToken)
-		n.POST("/user/password/reset", apiv1.UserResetPassword)
-		n.POST("/user/confirm", apiv1.UserConfirmEmail)
+		ur.POST("/login", apiv1.Login)
+		ur.POST("/register", apiv1.RegisterUser)
+		ur.POST("/user/password/token", apiv1.UserRequestResetPasswordToken)
+		ur.POST("/user/password/reset", apiv1.UserResetPassword)
+		ur.POST("/user/confirm", apiv1.UserConfirmEmail)
 	}
 
 	if config.AuthOpenIDEnabled.GetBool() {
-		n.POST("/auth/openid/:provider/callback", openid.HandleCallback)
+		ur.POST("/auth/openid/:provider/callback", openid.HandleCallback)
 	}
 
 	// Testing
@@ -252,12 +270,32 @@ func registerAPIRoutes(a *echo.Group) {
 
 	// Link share auth
 	if config.ServiceEnableLinkSharing.GetBool() {
-		n.POST("/shares/:share/auth", apiv1.AuthenticateLinkShare)
+		ur.POST("/shares/:share/auth", apiv1.AuthenticateLinkShare)
 	}
 
 	// ===== Routes with Authetication =====
 	// Authetification
-	a.Use(middleware.JWT([]byte(config.ServiceJWTSecret.GetString())))
+	a.Use(middleware.JWTWithConfig(middleware.JWTConfig{
+		// Custom parse function to make the middleware work with the github.com/golang-jwt/jwt/v4 package.
+		// See https://github.com/labstack/echo/pull/1916#issuecomment-878046299
+		ParseTokenFunc: func(auth string, c echo.Context) (interface{}, error) {
+			keyFunc := func(t *jwt.Token) (interface{}, error) {
+				if t.Method.Alg() != "HS256" {
+					return nil, fmt.Errorf("unexpected jwt signing method=%v", t.Header["alg"])
+				}
+				return []byte(config.ServiceJWTSecret.GetString()), nil
+			}
+
+			token, err := jwt.Parse(auth, keyFunc)
+			if err != nil {
+				return nil, err
+			}
+			if !token.Valid {
+				return nil, errors.New("invalid token")
+			}
+			return token, nil
+		},
+	}))
 
 	// Rate limit
 	setupRateLimit(a, config.RateLimitKind.GetString())
@@ -279,6 +317,12 @@ func registerAPIRoutes(a *echo.Group) {
 	u.POST("/settings/avatar", apiv1.ChangeUserAvatarProvider)
 	u.PUT("/settings/avatar/upload", apiv1.UploadAvatar)
 	u.POST("/settings/general", apiv1.UpdateGeneralUserSettings)
+	u.POST("/export/request", apiv1.RequestUserDataExport)
+	u.POST("/export/download", apiv1.DownloadUserDataExport)
+	u.GET("/timezones", apiv1.GetAvailableTimezones)
+	u.PUT("/settings/token/caldav", apiv1.GenerateCaldavToken)
+	u.GET("/settings/token/caldav", apiv1.GetCaldavTokens)
+	u.DELETE("/settings/token/caldav/:id", apiv1.DeleteCaldavToken)
 
 	if config.ServiceEnableTotp.GetBool() {
 		u.GET("/settings/totp", apiv1.UserTOTP)
@@ -286,6 +330,13 @@ func registerAPIRoutes(a *echo.Group) {
 		u.POST("/settings/totp/enable", apiv1.UserTOTPEnable)
 		u.POST("/settings/totp/disable", apiv1.UserTOTPDisable)
 		u.GET("/settings/totp/qrcode", apiv1.UserTOTPQrCode)
+	}
+
+	// User deletion
+	if config.ServiceEnableUserDeletion.GetBool() {
+		u.POST("/deletion/request", apiv1.UserRequestDeletion)
+		u.POST("/deletion/confirm", apiv1.UserConfirmDeletion)
+		u.POST("/deletion/cancel", apiv1.UserCancelDeletion)
 	}
 
 	listHandler := &handler.WebHandler{
@@ -532,7 +583,35 @@ func registerAPIRoutes(a *echo.Group) {
 
 	// Migrations
 	m := a.Group("/migration")
+	registerMigrations(m)
 
+	// List Backgrounds
+	if config.BackgroundsEnabled.GetBool() {
+		a.GET("/lists/:list/background", backgroundHandler.GetListBackground)
+		a.DELETE("/lists/:list/background", backgroundHandler.RemoveListBackground)
+		if config.BackgroundsUploadEnabled.GetBool() {
+			uploadBackgroundProvider := &backgroundHandler.BackgroundProvider{
+				Provider: func() background.Provider {
+					return &upload.Provider{}
+				},
+			}
+			a.PUT("/lists/:list/backgrounds/upload", uploadBackgroundProvider.UploadBackground)
+		}
+		if config.BackgroundsUnsplashEnabled.GetBool() {
+			unsplashBackgroundProvider := &backgroundHandler.BackgroundProvider{
+				Provider: func() background.Provider {
+					return &unsplash.Provider{}
+				},
+			}
+			a.GET("/backgrounds/unsplash/search", unsplashBackgroundProvider.SearchBackgrounds)
+			a.POST("/lists/:list/backgrounds/unsplash", unsplashBackgroundProvider.SetBackground)
+			a.GET("/backgrounds/unsplash/images/:image/thumb", unsplash.ProxyUnsplashThumb)
+			a.GET("/backgrounds/unsplash/images/:image", unsplash.ProxyUnsplashImage)
+		}
+	}
+}
+
+func registerMigrations(m *echo.Group) {
 	// Wunderlist
 	if config.MigrationWunderlistEnable.GetBool() {
 		wunderlistMigrationHandler := &migrationHandler.MigrationWeb{
@@ -573,36 +652,27 @@ func registerAPIRoutes(a *echo.Group) {
 		microsoftTodoMigrationHandler.RegisterRoutes(m)
 	}
 
-	// List Backgrounds
-	if config.BackgroundsEnabled.GetBool() {
-		a.GET("/lists/:list/background", backgroundHandler.GetListBackground)
-		a.DELETE("/lists/:list/background", backgroundHandler.RemoveListBackground)
-		if config.BackgroundsUploadEnabled.GetBool() {
-			uploadBackgroundProvider := &backgroundHandler.BackgroundProvider{
-				Provider: func() background.Provider {
-					return &upload.Provider{}
-				},
-			}
-			a.PUT("/lists/:list/backgrounds/upload", uploadBackgroundProvider.UploadBackground)
-		}
-		if config.BackgroundsUnsplashEnabled.GetBool() {
-			unsplashBackgroundProvider := &backgroundHandler.BackgroundProvider{
-				Provider: func() background.Provider {
-					return &unsplash.Provider{}
-				},
-			}
-			a.GET("/backgrounds/unsplash/search", unsplashBackgroundProvider.SearchBackgrounds)
-			a.POST("/lists/:list/backgrounds/unsplash", unsplashBackgroundProvider.SetBackground)
-			a.GET("/backgrounds/unsplash/images/:image/thumb", unsplash.ProxyUnsplashThumb)
-			a.GET("/backgrounds/unsplash/images/:image", unsplash.ProxyUnsplashImage)
-		}
+	// Vikunja File Migrator
+	vikunjaFileMigrationHandler := &migrationHandler.FileMigratorWeb{
+		MigrationStruct: func() migration.FileMigrator {
+			return &vikunja_file.FileMigrator{}
+		},
 	}
+	vikunjaFileMigrationHandler.RegisterRoutes(m)
+
+	// TickTick File Migrator
+	tickTickFileMigrator := migrationHandler.FileMigratorWeb{
+		MigrationStruct: func() migration.FileMigrator {
+			return &ticktick.Migrator{}
+		},
+	}
+	tickTickFileMigrator.RegisterRoutes(m)
 }
 
 func registerCalDavRoutes(c *echo.Group) {
 
 	// Basic auth middleware
-	c.Use(middleware.BasicAuth(caldavBasicAuth))
+	c.Use(middleware.BasicAuth(caldav.BasicAuth))
 
 	// THIS is the entry point for caldav clients, otherwise lists will show up double
 	c.Any("", caldav.EntryHandler)
@@ -613,27 +683,4 @@ func registerCalDavRoutes(c *echo.Group) {
 	c.Any("/lists/:list", caldav.ListHandler)
 	c.Any("/lists/:list/", caldav.ListHandler)
 	c.Any("/lists/:list/:task", caldav.TaskHandler) // Mostly used for editing
-}
-
-func caldavBasicAuth(username, password string, c echo.Context) (bool, error) {
-	creds := &user.Login{
-		Username: username,
-		Password: password,
-	}
-	s := db.NewSession()
-	defer s.Close()
-	u, err := user.CheckUserCredentials(s, creds)
-	if err != nil {
-		_ = s.Rollback()
-		log.Errorf("Error during basic auth for caldav: %v", err)
-		return false, nil
-	}
-
-	if err := s.Commit(); err != nil {
-		return false, err
-	}
-
-	// Save the user in echo context for later use
-	c.Set("userBasicAuth", u)
-	return true, nil
 }

@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU Affero General Public Licensee
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+//go:build mage
 // +build mage
 
 package main
@@ -26,7 +27,6 @@ import (
 	"fmt"
 	"github.com/iancoleman/strcase"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -74,9 +74,21 @@ var (
 	}
 )
 
+func runCmdWithOutput(name string, arg ...string) (output []byte, err error) {
+	cmd := exec.Command(name, arg...)
+	output, err = cmd.Output()
+	if err != nil {
+		if ee, is := err.(*exec.ExitError); is {
+			return nil, fmt.Errorf("error running command: %s, %s", string(ee.Stderr), err)
+		}
+		return nil, fmt.Errorf("error running command: %s", err)
+	}
+
+	return output, nil
+}
+
 func setVersion() {
-	versionCmd := exec.Command("git", "describe", "--tags", "--always", "--abbrev=10")
-	version, err := versionCmd.Output()
+	version, err := runCmdWithOutput("git", "describe", "--tags", "--always", "--abbrev=10")
 	if err != nil {
 		fmt.Printf("Error getting version: %s\n", err)
 		os.Exit(1)
@@ -117,8 +129,7 @@ func setExecutable() {
 }
 
 func setApiPackages() {
-	cmd := exec.Command("go", "list", "all")
-	pkgs, err := cmd.Output()
+	pkgs, err := runCmdWithOutput("go", "list", "all")
 	if err != nil {
 		fmt.Printf("Error getting packages: %s\n", err)
 		os.Exit(1)
@@ -145,8 +156,7 @@ func setRootPath() {
 
 func setGoFiles() {
 	// GOFILES := $(shell find . -name "*.go" -type f ! -path "*/bindata.go")
-	cmd := exec.Command("find", ".", "-name", "*.go", "-type", "f", "!", "-path", "*/bindata.go")
-	files, err := cmd.Output()
+	files, err := runCmdWithOutput("find", ".", "-name", "*.go", "-type", "f", "!", "-path", "*/bindata.go")
 	if err != nil {
 		fmt.Printf("Error getting go files: %s\n", err)
 		os.Exit(1)
@@ -170,7 +180,6 @@ func initVars() {
 	setVersion()
 	setBinLocation()
 	setPkgVersion()
-	setApiPackages()
 	setGoFiles()
 	Ldflags = `-X "` + PACKAGE + `/pkg/version.Version=` + VersionNumber + `" -X "main.Tags=` + Tags + `"`
 }
@@ -340,8 +349,9 @@ type Test mg.Namespace
 // Runs all tests except integration tests
 func (Test) Unit() {
 	mg.Deps(initVars)
+	setApiPackages()
 	// We run everything sequentially and not in parallel to prevent issues with real test databases
-	args := append([]string{"test", Goflags[0], "-p", "1"}, ApiPackages...)
+	args := append([]string{"test", Goflags[0], "-p", "1", "-coverprofile", "cover.out", "-timeout", "45m"}, ApiPackages...)
 	runAndStreamOutput("go", args...)
 }
 
@@ -356,7 +366,7 @@ func (Test) Coverage() {
 func (Test) Integration() {
 	mg.Deps(initVars)
 	// We run everything sequentially and not in parallel to prevent issues with real test databases
-	runAndStreamOutput("go", "test", Goflags[0], "-p", "1", PACKAGE+"/pkg/integrations")
+	runAndStreamOutput("go", "test", Goflags[0], "-p", "1", "-timeout", "45m", PACKAGE+"/pkg/integrations")
 }
 
 type Check mg.Namespace
@@ -395,7 +405,7 @@ func checkGolangCiLintInstalled() {
 	mg.Deps(initVars)
 	if err := exec.Command("golangci-lint").Run(); err != nil && strings.Contains(err.Error(), "executable file not found") {
 		fmt.Println("Please manually install golangci-lint by running")
-		fmt.Println("curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.31.0")
+		fmt.Println("curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.47.3")
 		os.Exit(1)
 	}
 }
@@ -548,7 +558,9 @@ func (Release) Compress(ctx context.Context) error {
 			return nil
 		}
 		// No mips or s390x for you today
-		if strings.Contains(info.Name(), "mips") || strings.Contains(info.Name(), "s390x") {
+		if strings.Contains(info.Name(), "mips") ||
+			strings.Contains(info.Name(), "s390x") ||
+			strings.Contains(info.Name(), "riscv64") { // not supported by upx
 			return nil
 		}
 
@@ -652,7 +664,7 @@ func (Release) Zip() error {
 
 		fmt.Printf("Zipping %s...\n", info.Name())
 
-		c := exec.Command("zip", "-r", RootPath+"/"+DIST+"/zip/"+info.Name(), ".", "-i", "*")
+		c := exec.Command("zip", "-r", RootPath+"/"+DIST+"/zip/"+info.Name()+".zip", ".", "-i", "*")
 		c.Dir = path
 		out, err := c.Output()
 		fmt.Print(string(out))
@@ -688,14 +700,14 @@ func (Release) Packages() error {
 
 	// Because nfpm does not  support templating, we replace the values in the config file and restore it after running
 	nfpmConfigPath := RootPath + "/nfpm.yaml"
-	nfpmconfig, err := ioutil.ReadFile(nfpmConfigPath)
+	nfpmconfig, err := os.ReadFile(nfpmConfigPath)
 	if err != nil {
 		return err
 	}
 
 	fixedConfig := strings.ReplaceAll(string(nfpmconfig), "<version>", VersionNumber)
 	fixedConfig = strings.ReplaceAll(fixedConfig, "<binlocation>", BinLocation)
-	if err := ioutil.WriteFile(nfpmConfigPath, []byte(fixedConfig), 0); err != nil {
+	if err := os.WriteFile(nfpmConfigPath, []byte(fixedConfig), 0); err != nil {
 		return err
 	}
 
@@ -708,7 +720,7 @@ func (Release) Packages() error {
 	runAndStreamOutput(binpath, "pkg", "--packager", "rpm", "--target", releasePath)
 	runAndStreamOutput(binpath, "pkg", "--packager", "apk", "--target", releasePath)
 
-	return ioutil.WriteFile(nfpmConfigPath, nfpmconfig, 0)
+	return os.WriteFile(nfpmConfigPath, nfpmconfig, 0)
 }
 
 type Dev mg.Namespace
@@ -872,7 +884,7 @@ func (s *` + name + `) Handle(msg *message.Message) (err error) {
 	if _, err := f.Seek(idx, 0); err != nil {
 		return err
 	}
-	remainder, err := ioutil.ReadAll(f)
+	remainder, err := io.ReadAll(f)
 	if err != nil {
 		return err
 	}
@@ -995,12 +1007,19 @@ func parseYamlConfigNode(node *yaml.Node) (config *configOption) {
 	return config
 }
 
-func printConfig(config []*configOption, level int) (rendered string) {
+func printConfig(config []*configOption, level int, parent string) (rendered string) {
 
 	// Keep track of what we already printed to prevent printing things twice
 	printed := make(map[string]bool)
 
 	for _, option := range config {
+
+		// FIXME: Not a good solution. Ideally this would work without the level check, but since generating config
+		// for more than two levels is currently broken anyway, I'll fix this after moving the config generation
+		// to a better format than yaml.
+		if level == 0 && option.key != "" {
+			parent = option.key
+		}
 
 		if option.key != "" {
 
@@ -1030,12 +1049,17 @@ func printConfig(config []*configOption, level int) (rendered string) {
 				if option.defaultValue == "" {
 					rendered += "<empty>"
 				}
-				rendered += "`\n"
+				rendered += "`\n\n"
+
+				fullPath := parent + "." + option.key
+
+				rendered += "Full path: `" + fullPath + "`\n\n"
+				rendered += "Environment path: `VIKUNJA_" + strcase.ToScreamingSnake(strings.ToUpper(fullPath)) + "`\n\n"
 			}
 		}
 
 		printed[option.key] = true
-		rendered += "\n" + printConfig(option.children, level+1)
+		rendered += "\n" + printConfig(option.children, level+1, parent)
 	}
 
 	return
@@ -1049,7 +1073,7 @@ const (
 // Generates the config docs from a commented config.yml.sample file in the repo root.
 func GenerateDocs() error {
 
-	config, err := ioutil.ReadFile("config.yml.sample")
+	config, err := os.ReadFile("config.yml.sample")
 	if err != nil {
 		return err
 	}
@@ -1069,7 +1093,7 @@ func GenerateDocs() error {
 		}
 	}
 
-	renderedConfig := printConfig(conf, 0)
+	renderedConfig := printConfig(conf, 0, "")
 
 	// Rebuild the config
 	file, err := os.OpenFile(configDocPath, os.O_RDWR, 0)
@@ -1099,7 +1123,7 @@ func GenerateDocs() error {
 
 	// We write the full file to prevent old content leftovers at the end
 	// I know, there are probably better ways to do this.
-	if err := ioutil.WriteFile(configDocPath, []byte(fullConfig), 0); err != nil {
+	if err := os.WriteFile(configDocPath, []byte(fullConfig), 0); err != nil {
 		return err
 	}
 

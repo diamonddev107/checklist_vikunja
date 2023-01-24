@@ -25,6 +25,9 @@ All examples on this page already reflect this and do not require additional wor
 
 ## Redis
 
+While Vikunja has support to use redis as a caching backend, you'll probably not need it unless you're using Vikunja 
+with more than a handful of users.
+
 To use redis, you'll need to add this to the config examples below:
 
 {{< highlight yaml >}}
@@ -42,6 +45,80 @@ services:
       - ./files:/app/vikunja/files
   redis:
     image: redis
+{{< /highlight >}}
+
+## PostgreSQL
+
+Vikunja supports postgres, mysql and sqlite as a database backend. The examples on this page use mysql with a mariadb container.
+To use postgres as a database backend, change the `db` section of the examples to this:
+
+{{< highlight yaml >}}
+db:
+  image: postgres:13
+  environment:
+    POSTGRES_PASSWORD: secret
+    POSTGRES_USER: vikunja
+  volumes:
+    - ./db:/var/lib/postgresql/data
+  restart: unless-stopped
+{{< /highlight >}}
+
+You'll also need to change the `VIKUNJA_DATABASE_TYPE` to `postgres` on the api container declaration.
+
+<div class="notification is-warning">
+<b>NOTE:</b> The mariadb container can sometimes take a while to initialize, especially on the first run. 
+During this time, the api container will fail to start at all. It will automatically restart every few seconds.
+</div>
+
+## Example without any proxy
+
+This example lets you host Vikunja without any reverse proxy in front of it. This is the absolute minimum configuration 
+you need to get something up and running. If you want to host Vikunja on one single port instead of two different ones 
+or need tls termination, check out one of the other examples.
+
+Not that you need to change the `VIKUNJA_API_URL` environment variable to the ip (the docker host you're running this on) 
+is reachable at. Because the browser you'll use to access the Vikunja frontend uses that url to make the requests, it 
+has to be able to reach that ip + port from the outside. Putting everything in a private network won't work.
+
+{{< highlight yaml >}}
+version: '3'
+
+services:
+  db:
+    image: mariadb:10
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: supersecret
+      MYSQL_USER: vikunja
+      MYSQL_PASSWORD: secret
+      MYSQL_DATABASE: vikunja
+    volumes:
+      - ./db:/var/lib/mysql
+    restart: unless-stopped
+  api:
+    image: vikunja/api
+    environment:
+      VIKUNJA_DATABASE_HOST: db
+      VIKUNJA_DATABASE_PASSWORD: secret
+      VIKUNJA_DATABASE_TYPE: mysql
+      VIKUNJA_DATABASE_USER: vikunja
+      VIKUNJA_DATABASE_DATABASE: vikunja
+      VIKUNJA_SERVICE_JWTSECRET: <a super secure random secret>
+      VIKUNJA_SERVICE_FRONTENDURL: http://<your public frontend url with slash>/
+    ports:
+      - 3456:3456
+    volumes:
+      - ./files:/app/vikunja/files
+    depends_on:
+      - db
+    restart: unless-stopped
+  frontend:
+    image: vikunja/frontend
+    ports:
+      - 80:80
+    environment:
+      VIKUNJA_API_URL: http://<your-ip-here>:3456/api/v1
+    restart: unless-stopped
 {{< /highlight >}}
 
 ## Example with traefik 2
@@ -66,6 +143,8 @@ services:
       VIKUNJA_DATABASE_TYPE: mysql
       VIKUNJA_DATABASE_USER: vikunja
       VIKUNJA_DATABASE_DATABASE: vikunja
+      VIKUNJA_SERVICE_JWTSECRET: <a super secure random secret>
+      VIKUNJA_SERVICE_FRONTENDURL: https://<your public frontend url with slash>/
     volumes: 
       - ./files:/app/vikunja/files
     networks:
@@ -124,6 +203,8 @@ services:
       VIKUNJA_DATABASE_TYPE: mysql
       VIKUNJA_DATABASE_USER: vikunja
       VIKUNJA_DATABASE_DATABASE: vikunja
+      VIKUNJA_SERVICE_JWTSECRET: <a super secure random secret>
+      VIKUNJA_SERVICE_FRONTENDURL: https://<your public frontend url with slash>/
     volumes: 
       - ./files:/app/vikunja/files
     networks:
@@ -203,6 +284,8 @@ services:
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     environment:
       MYSQL_ROOT_PASSWORD: supersecret
+      MYSQL_USER: vikunja
+      MYSQL_PASSWORD: secret
       MYSQL_DATABASE: vikunja
     volumes:
       - ./db:/var/lib/mysql
@@ -211,10 +294,12 @@ services:
     image: vikunja/api
     environment:
       VIKUNJA_DATABASE_HOST: db
-      VIKUNJA_DATABASE_PASSWORD: supersecret
+      VIKUNJA_DATABASE_PASSWORD: secret
       VIKUNJA_DATABASE_TYPE: mysql
-      VIKUNJA_DATABASE_USER: root
+      VIKUNJA_DATABASE_USER: vikunja
       VIKUNJA_DATABASE_DATABASE: vikunja
+      VIKUNJA_SERVICE_JWTSECRET: <a super secure random secret>
+      VIKUNJA_SERVICE_FRONTENDURL: https://<your public frontend url with slash>/
     volumes: 
       - ./files:/app/vikunja/files
     depends_on:
@@ -258,7 +343,9 @@ services:
     image: mariadb:10
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     environment:
-      MYSQL_ROOT_PASSWORD: supersecret
+      MYSQL_ROOT_PASSWORD: supersecret 
+      MYSQL_USER: vikunja
+      MYSQL_PASSWORD: secret
       MYSQL_DATABASE: vikunja
     volumes:
       - ./db:/var/lib/mysql
@@ -267,10 +354,12 @@ services:
     image: vikunja/api
     environment:
       VIKUNJA_DATABASE_HOST: db
-      VIKUNJA_DATABASE_PASSWORD: supersecret
+      VIKUNJA_DATABASE_PASSWORD: secret
       VIKUNJA_DATABASE_TYPE: mysql
-      VIKUNJA_DATABASE_USER: root
+      VIKUNJA_DATABASE_USER: vikunja
       VIKUNJA_DATABASE_DATABASE: vikunja
+      VIKUNJA_SERVICE_JWTSECRET: <a super secure random secret>
+      VIKUNJA_SERVICE_FRONTENDURL: https://<your public frontend url with slash>/
     volumes: 
       - ./files:/app/vikunja/files
     depends_on:
@@ -291,3 +380,83 @@ services:
     volumes:
         - ./Caddyfile:/etc/caddy/Caddyfile:ro
 {{< /highlight >}}
+
+## Setup on a Synology NAS
+
+There is a proxy preinstalled in DSM, so if you want to access vikunja from outside,
+you can prepare 2 proxy rules:
+
+* a redirection rule for vikunja's api (see example screenshot using port 3456)
+* a similar redirection rule for vikunja's frontend (using port 4321)
+
+![Synology Proxy Settings](/docs/synology-proxy-1.png)
+
+You should also add 2 empty folders for mariadb and vikunja inside Synology's
+docker main folders:
+
+* Docker
+  * vikunja
+  * mariadb
+
+Synology has it's own GUI for managing Docker containers... But it's easier via docker compose.
+
+To do that, you can
+
+* either activate SSH and paste the adapted compose file in a terminal (using Putty or similar)
+* without activating SSH as a "custom script" (go to Control Panel / Task Scheduler / Create / Scheduled Task / User-defined script)
+* without activating SSH, by using Portainer (you have to install first, check out [this tutorial](https://www.portainer.io/blog/how-to-install-portainer-on-a-synology-nas) for exmple):
+  1. Go to **Dashboard / Stacks** click the button **"Add Stack"**
+  2. Give it the name Vikunja and paste the adapted docker compose file 
+  3. Deploy the Stack with the "Delpoy Stack" button: 
+
+![Portainer Stack deploy](/docs/synology-proxy-2.png)
+
+The docker-compose file we're going to use is very similar to the [example without any proxy](#example-without-any-proxy) above:
+
+{{< highlight yaml >}}
+version: '3'
+
+services:
+  db:
+    image: mariadb:10
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: supersecret
+      MYSQL_USER: vikunja
+      MYSQL_PASSWORD: secret
+      MYSQL_DATABASE: vikunja
+    volumes:
+      - ./db:/var/lib/mysql
+    restart: unless-stopped
+  api:
+    image: vikunja/api
+    environment:
+      VIKUNJA_DATABASE_HOST: db
+      VIKUNJA_DATABASE_PASSWORD: secret
+      VIKUNJA_DATABASE_TYPE: mysql
+      VIKUNJA_DATABASE_USER: vikunja
+      VIKUNJA_DATABASE_DATABASE: vikunja
+      VIKUNJA_SERVICE_JWTSECRET: <a super secure random secret>
+      VIKUNJA_SERVICE_FRONTENDURL: https://<your public frontend url with slash>/
+    ports:
+      - 3456:3456
+    volumes:
+      - ./files:/app/vikunja/files
+    depends_on:
+      - db
+    restart: unless-stopped
+  frontend:
+    image: vikunja/frontend
+    ports:
+      - 4321:80
+    environment:
+      VIKUNJA_API_URL: http://vikunja-api-domain.tld/api/v1
+    restart: unless-stopped
+{{< /highlight >}}
+
+You may want to change the volumes to match the rest of your setup.
+
+Once deployed, you might want to change the [`PUID` and `GUID` settings]({{< ref "install-backend.md">}}#setting-user-and-group-id-of-the-user-running-vikunja) or [set the time zone]({{< ref "config.md">}}#timezone).
+
+After registering all your users, you might also want to [disable the user registration]({{<ref "config.md">}}#enableregistration).
+

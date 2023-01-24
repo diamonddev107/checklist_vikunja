@@ -20,6 +20,7 @@ import (
 	"code.vikunja.io/api/pkg/db"
 	"code.vikunja.io/api/pkg/events"
 	"code.vikunja.io/api/pkg/log"
+	"code.vikunja.io/api/pkg/modules/keyvalue"
 )
 
 // InitTests handles the actual bootstrapping of the test env
@@ -34,10 +35,12 @@ func InitTests() {
 		log.Fatal(err)
 	}
 
-	err = db.InitTestFixtures("users")
+	err = db.InitTestFixtures("users", "user_tokens")
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	events.Fake()
+
+	keyvalue.InitStorage()
 }

@@ -192,12 +192,12 @@ func TestTask_Update(t *testing.T) {
 		defer s.Close()
 
 		task := &Task{
-			ID:          4,
-			Title:       "test10000",
-			Description: "Lorem Ipsum Dolor",
-			Position:    10,
-			ListID:      1,
-			BucketID:    2, // Bucket 2 already has 3 tasks and a limit of 3
+			ID:             4,
+			Title:          "test10000",
+			Description:    "Lorem Ipsum Dolor",
+			KanbanPosition: 10,
+			ListID:         1,
+			BucketID:       2, // Bucket 2 already has 3 tasks and a limit of 3
 		}
 		err := task.Update(s, u)
 		assert.NoError(t, err)
@@ -718,14 +718,12 @@ func TestTask_ReadOne(t *testing.T) {
 		assert.True(t, IsErrTaskDoesNotExist(err))
 	})
 	t.Run("with subscription", func(t *testing.T) {
-		u = &user.User{ID: 6}
-
 		db.LoadAndAssertFixtures(t)
 		s := db.NewSession()
 		defer s.Close()
 
 		task := &Task{ID: 22}
-		err := task.ReadOne(s, u)
+		err := task.ReadOne(s, &user.User{ID: 6})
 		assert.NoError(t, err)
 		assert.NotNil(t, task.Subscription)
 	})
@@ -742,4 +740,58 @@ func TestTask_ReadOne(t *testing.T) {
 		assert.NotNil(t, task.CreatedBy)
 		assert.Equal(t, int64(-2), task.CreatedBy.ID)
 	})
+	t.Run("favorite", func(t *testing.T) {
+		db.LoadAndAssertFixtures(t)
+		s := db.NewSession()
+		defer s.Close()
+
+		task := &Task{ID: 1}
+		err := task.ReadOne(s, u)
+		assert.NoError(t, err)
+		assert.True(t, task.IsFavorite)
+	})
+	t.Run("favorite for a different user", func(t *testing.T) {
+		db.LoadAndAssertFixtures(t)
+		s := db.NewSession()
+		defer s.Close()
+
+		task := &Task{ID: 1}
+		err := task.ReadOne(s, &user.User{ID: 2})
+		assert.NoError(t, err)
+		assert.False(t, task.IsFavorite)
+	})
+}
+
+func Test_getTaskIndexFromSearchString(t *testing.T) {
+	type args struct {
+		s string
+	}
+	tests := []struct {
+		name      string
+		args      args
+		wantIndex int64
+	}{
+		{
+			name:      "task index in text",
+			args:      args{s: "Task #12"},
+			wantIndex: 12,
+		},
+		{
+			name:      "no task index",
+			args:      args{s: "Task"},
+			wantIndex: 0,
+		},
+		{
+			name:      "not numeric but with prefix",
+			args:      args{s: "Task #aaaaa"},
+			wantIndex: 0,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if gotIndex := getTaskIndexFromSearchString(tt.args.s); gotIndex != tt.wantIndex {
+				t.Errorf("getTaskIndexFromSearchString() = %v, want %v", gotIndex, tt.wantIndex)
+			}
+		})
+	}
 }

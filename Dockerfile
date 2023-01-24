@@ -1,33 +1,27 @@
 
 ##############
 # Build stage
-FROM golang:1-alpine3.12 AS build-env
+FROM golang:1.19-alpine AS build-env
 
-RUN \
+RUN apk --no-cache add build-base git && \
   go install github.com/magefile/mage@latest && \
   mv /go/bin/mage /usr/local/go/bin
 
 ARG VIKUNJA_VERSION
-ENV TAGS "sqlite"
-ENV GO111MODULE=on
-
-# Build deps
-RUN apk --no-cache add build-base git
 
 # Setup repo
-COPY . go/src/code.vikunja.io/api
+COPY . /go/src/code.vikunja.io/api
 WORKDIR /go/src/code.vikunja.io/api
 
 # Checkout version if set
-RUN git clone https://diamonddev107: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@github.com/diamonddev107/checklist_vikunja && \
-cd checklist_vikunja &&\
-mage build:clean build
+RUN if [ -n "${VIKUNJA_VERSION}" ]; then git checkout "${VIKUNJA_VERSION}"; fi \
+ && mage build:clean build
 
 ###################
 # The actual image
 # Note: I wanted to use the scratch image here, but unfortunatly the go-sqlite bindings require cgo and
 # because of this, the container would not start when I compiled the image without cgo.
-FROM alpine:3.12
+FROM alpine:3.16
 LABEL maintainer="maintainers@vikunja.io"
 
 WORKDIR /app/vikunja/
@@ -43,7 +37,7 @@ RUN apk --no-cache add shadow && \
   chown vikunja -R /app/vikunja
 COPY run.sh /run.sh
 
-# Fix time zone settings not working
+# Add time zone data
 RUN apk --no-cache add tzdata
 
 # Files permissions

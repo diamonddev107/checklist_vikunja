@@ -18,6 +18,7 @@ package v1
 
 import (
 	"net/http"
+	"time"
 
 	"code.vikunja.io/api/pkg/user"
 
@@ -32,7 +33,9 @@ import (
 
 type userWithSettings struct {
 	user.User
-	Settings *UserSettings `json:"settings"`
+	Settings            *UserSettings `json:"settings"`
+	DeletionScheduledAt time.Time     `json:"deletion_scheduled_at"`
+	IsLocalUser         bool          `json:"is_local_user"`
 }
 
 // UserShow gets all informations about the current user
@@ -68,7 +71,14 @@ func UserShow(c echo.Context) error {
 			DiscoverableByName:           u.DiscoverableByName,
 			DiscoverableByEmail:          u.DiscoverableByEmail,
 			OverdueTasksRemindersEnabled: u.OverdueTasksRemindersEnabled,
+			DefaultListID:                u.DefaultListID,
+			WeekStart:                    u.WeekStart,
+			Language:                     u.Language,
+			Timezone:                     u.Timezone,
+			OverdueTasksRemindersTime:    u.OverdueTasksRemindersTime,
 		},
+		DeletionScheduledAt: u.DeletionScheduledAt,
+		IsLocalUser:         u.Issuer == user.IssuerLocal,
 	}
 
 	return c.JSON(http.StatusOK, us)

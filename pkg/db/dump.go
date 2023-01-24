@@ -19,6 +19,8 @@ package db
 import (
 	"encoding/json"
 
+	"code.vikunja.io/api/pkg/log"
+
 	"xorm.io/xorm/schemas"
 )
 
@@ -47,10 +49,22 @@ func Dump() (data map[string][]byte, err error) {
 
 // Restore restores a table with all its entries
 func Restore(table string, contents []map[string]interface{}) (err error) {
+	if _, err := x.IsTableExist(table); err != nil {
+		return err
+	}
 
 	for _, content := range contents {
 		if _, err := x.Table(table).Insert(content); err != nil {
 			return err
+		}
+	}
+
+	if Type() == schemas.POSTGRES {
+		idSequence := table + "_id_seq"
+		_, err = x.Query("SELECT setval('" + idSequence + "', COALESCE(MAX(id), 1) )")
+		if err != nil {
+			log.Warningf("Could not reset id sequence for %s: %s", idSequence, err)
+			err = nil
 		}
 	}
 

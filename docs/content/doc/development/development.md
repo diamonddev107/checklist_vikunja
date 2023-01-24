@@ -1,5 +1,5 @@
 ---
-date: "2019-02-12:00:00+02:00"
+date: "2022-09-21:00:00+02:00"
 title: "Development"
 toc: true
 draft: false
@@ -12,56 +12,44 @@ menu:
 
 # Development
 
-We use go modules to vendor libraries for Vikunja, so you'll need at least go `1.11` to use these.
-If you don't intend to add new dependencies, go `1.9` and above should be fine.
+{{< table_of_contents >}}
 
-To contribute to Vikunja, fork the project and work on the master branch.
+## General
+
+To contribute to Vikunja, fork the project and work on the main branch.
+Once you feel like your changes are ready, open a PR in the respective repo.
+A maintainer will take a look and give you feedback. Once everyone is happy, the PR gets merged and released.
+
+If you plan to do a bigger change, it is better to open an issue for discussion first.
+
+## API
+
+The code for the api is located at [code.vikunja.io/api](https://code.vikunja.io/api).
+
+We use go modules to manage third-party libraries for Vikunja, so you'll need at least go `1.17` to use these.
 
 A lot of developing tasks are automated using a Magefile, so make sure to [take a look at it]({{< ref "mage.md">}}).
 
-{{< table_of_contents >}}
+Make sure to check the other doc articles for specific development tasks like [testing]({{< ref "test.md">}}),
+[database migrations]({{< ref "db-migrations.md" >}}) and the [project structure]({{< ref "structure.md" >}}).
 
-## Libraries
+## Frontend requirements
 
-We keep all libraries used for Vikunja around in the `vendor/` folder to still be able to build the project even if
-some maintainers take their libraries down like [it happened in the past](https://github.com/jteeuwen/go-bindata/issues/5).
+The code for the frontend is located at [code.vikunja.io/frontend](https://code.vikunja.io/frontend).
+More instructions can be found in the repo's README.
 
-## Tests
+You need to have [pnpm](https://pnpm.io/) and nodejs in version 16 or 18 installed.
 
-See [testing]({{< ref "test.md">}}).
+## Git flow
 
-#### Development using go modules
+The `main` branch is the latest and bleeding edge branch with all changes. Unstable releases are automatically created from this branch.
 
-If you're able to use go modules, you can clone the project wherever you want to and work from there.
+A release gets tagged from the main branch with the version name as tag name.
 
-#### Development-setup without go modules
+Backports and point-releases should go to a `release/version` branch, based on the tag they are building on top of.
 
-Some internal packages are referenced using their respective package URL. This can become problematic. 
-To “trick” the Go tool into thinking this is a clone from the official repository, download the source code 
-into `$GOPATH/code.vikunja.io/api`. Fork the Vikunja repository, it should then be possible to switch the source directory on the command line.
+## Conventional commits
 
-{{< highlight bash >}}
-cd $GOPATH/src/code.vikunja.io/api
-{{< /highlight >}}
+We're using [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) because they greatly simplify generating release notes.
 
-To be able to create pull requests, the forked repository should be added as a remote to the Vikunja sources, otherwise changes can’t be pushed.
-
-{{< highlight bash >}}
-git remote rename origin upstream
-git remote add origin git@git.kolaente.de:<USERNAME>/api.git
-git fetch --all --prune
-{{< /highlight >}}
-
-This should provide a working development environment for Vikunja. Take a look at the Magefile to get an overview about 
-the available tasks. The most common tasks should be `mage test:unit` which will start our test environment and `mage build:build` 
-which will build a vikunja binary into the working directory. Writing test cases is not mandatory to contribute, but it 
-is highly encouraged and helps developers sleep at night.
-
-That’s it! You are ready to hack on Vikunja. Test changes, push them to the repository, and open a pull request.
-
-## Static assets
-
-Each Vikunja release contains all static assets directly compiled into the binary.
-To prevent this during development, use the `dev` tag when developing.
-
-See the [mage docs](mage.md#statically-compile-all-templates-into-the-binary) about how to compile with static assets for a release.
+It is not required to use them when creating a PR, but appreciated.

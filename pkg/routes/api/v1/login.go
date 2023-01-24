@@ -19,13 +19,15 @@ package v1
 import (
 	"net/http"
 
-	"code.vikunja.io/api/pkg/db"
+	"code.vikunja.io/api/pkg/modules/keyvalue"
 
+	"code.vikunja.io/api/pkg/db"
 	"code.vikunja.io/api/pkg/models"
 	"code.vikunja.io/api/pkg/modules/auth"
 	user2 "code.vikunja.io/api/pkg/user"
 	"code.vikunja.io/web/handler"
-	"github.com/dgrijalva/jwt-go"
+
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/labstack/echo/v4"
 )
 
@@ -57,6 +59,11 @@ func Login(c echo.Context) error {
 		return handler.HandleHTTPError(err, c)
 	}
 
+	if user.Status == user2.StatusDisabled {
+		_ = s.Rollback()
+		return handler.HandleHTTPError(&user2.ErrAccountDisabled{UserID: user.ID}, c)
+	}
+
 	totpEnabled, err := user2.TOTPEnabledForUser(s, user)
 	if err != nil {
 		_ = s.Rollback()
@@ -64,14 +71,29 @@ func Login(c echo.Context) error {
 	}
 
 	if totpEnabled {
+		if u.TOTPPasscode == "" {
+			_ = s.Rollback()
+			return handler.HandleHTTPError(user2.ErrInvalidTOTPPasscode{}, c)
+		}
+
 		_, err = user2.ValidateTOTPPasscode(s, &user2.TOTPPasscode{
 			User:     user,
 			Passcode: u.TOTPPasscode,
 		})
 		if err != nil {
+			if user2.IsErrInvalidTOTPPasscode(err) {
+				user2.HandleFailedTOTPAuth(s, user)
+			}
 			_ = s.Rollback()
 			return handler.HandleHTTPError(err, c)
 		}
+	}
+
+	if err := keyvalue.Del(user.GetFailedTOTPAttemptsKey()); err != nil {
+		return err
+	}
+	if err := keyvalue.Del(user.GetFailedPasswordAttemptsKey()); err != nil {
+		return err
 	}
 
 	if err := s.Commit(); err != nil {
@@ -80,7 +102,7 @@ func Login(c echo.Context) error {
 	}
 
 	// Create token
-	return auth.NewUserAuthTokenResponse(user, c)
+	return auth.NewUserAuthTokenResponse(user, c, u.LongToken)
 }
 
 // RenewToken gives a new token to every user with a valid token
@@ -134,6 +156,12 @@ func RenewToken(c echo.Context) (err error) {
 		return handler.HandleHTTPError(err, c)
 	}
 
+	var long bool
+	lng, has := claims["long"]
+	if has {
+		long = lng.(bool)
+	}
+
 	// Create token
-	return auth.NewUserAuthTokenResponse(user, c)
+	return auth.NewUserAuthTokenResponse(user, c, long)
 }

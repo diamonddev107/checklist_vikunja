@@ -20,13 +20,14 @@ import (
 	"bytes"
 	"image"
 	"image/png"
-	"io/ioutil"
+	"io"
 	"strconv"
 
 	"code.vikunja.io/api/pkg/files"
 	"code.vikunja.io/api/pkg/log"
 	"code.vikunja.io/api/pkg/modules/keyvalue"
 	"code.vikunja.io/api/pkg/user"
+
 	"github.com/disintegration/imaging"
 )
 
@@ -39,22 +40,17 @@ func (p *Provider) GetAvatar(u *user.User, size int64) (avatar []byte, mimeType 
 
 	cacheKey := "avatar_upload_" + strconv.Itoa(int(u.ID))
 
-	ai, exists, err := keyvalue.Get(cacheKey)
+	var cached map[int64][]byte
+	exists, err := keyvalue.GetWithValue(cacheKey, &cached)
 	if err != nil {
 		return nil, "", err
-	}
-
-	var cached map[int64][]byte
-
-	if ai != nil {
-		cached = ai.(map[int64][]byte)
 	}
 
 	if !exists {
 		// Nothing ever cached for this user so we need to create the size map to avoid panics
 		cached = make(map[int64][]byte)
 	} else {
-		a := ai.(map[int64][]byte)
+		a := cached
 		if a != nil && a[size] != nil {
 			log.Debugf("Serving uploaded avatar for user %d and size %d from cache.", u.ID, size)
 			return a[size], "", nil
@@ -87,7 +83,7 @@ func (p *Provider) GetAvatar(u *user.User, size int64) (avatar []byte, mimeType 
 		return nil, "", err
 	}
 
-	avatar, err = ioutil.ReadAll(buf)
+	avatar, err = io.ReadAll(buf)
 	if err != nil {
 		return nil, "", err
 	}

@@ -1,3 +1,4 @@
+---
 kind: pipeline
 name: testing
 
@@ -5,37 +6,91 @@ workspace:
   base: /go
   path: src/code.vikunja.io/api
 
+volumes:
+  - name: tmp-sqlite-unit
+    temp:
+      medium: memory
+  - name: tmp-sqlite-integration
+    temp:
+      medium: memory
+  - name: tmp-sqlite-migration
+    temp:
+      medium: memory
+  - name: tmp-mysql-unit
+    temp:
+      medium: memory
+  - name: tmp-mysql-integration
+    temp:
+      medium: memory
+  - name: tmp-mysql-migration
+    temp:
+      medium: memory
+  - name: tmp-postgres-unit
+    temp:
+      medium: memory
+  - name: tmp-postgres-integration
+    temp:
+      medium: memory
+  - name: tmp-postgres-migration
+    temp:
+      medium: memory
+      
+
 services:
   - name: test-mysql-unit
     image: mariadb:10
     environment:
       MYSQL_ROOT_PASSWORD: vikunjatest
       MYSQL_DATABASE: vikunjatest
+    volumes:
+      - name: tmp-mysql-unit
+        path: /var/lib/mysql
   - name: test-mysql-integration
     image: mariadb:10
     environment:
       MYSQL_ROOT_PASSWORD: vikunjatest
       MYSQL_DATABASE: vikunjatest
+    volumes:
+      - name: tmp-mysql-integration
+        path: /var/lib/mysql
   - name: test-mysql-migration
     image: mariadb:10
     environment:
       MYSQL_ROOT_PASSWORD: vikunjatest
       MYSQL_DATABASE: vikunjatest
+    volumes:
+      - name: tmp-mysql-migration
+        path: /var/lib/mysql
   - name: test-postgres-unit
-    image: postgres:12
+    image: postgres:14
     environment:
       POSTGRES_PASSWORD: vikunjatest
       POSTGRES_DB: vikunjatest
+    volumes:
+      - name: tmp-postgres-unit
+        path: /var/lib/postgresql/data
+    commands:
+      - docker-entrypoint.sh -c fsync=off -c full_page_writes=off # turns of wal
   - name: test-postgres-integration
-    image: postgres:12
+    image: postgres:14
     environment:
       POSTGRES_PASSWORD: vikunjatest
       POSTGRES_DB: vikunjatest
+    volumes:
+      - name: tmp-postgres-integration
+        path: /var/lib/postgresql/data
+    commands:
+      - docker-entrypoint.sh -c fsync=off -c full_page_writes=off # turns of wal
   - name: test-postgres-migration
-    image: postgres:12
+    image: postgres:14
     environment:
       POSTGRES_PASSWORD: vikunjatest
       POSTGRES_DB: vikunjatest
+    volumes:
+      - name: tmp-postgres-migration
+        path: /var/lib/postgresql/data
+    commands:
+      - docker-entrypoint.sh -c fsync=off -c full_page_writes=off # turns of wal
 
 trigger:
   branch:
@@ -77,13 +132,15 @@ steps:
       event: [ push, tag, pull_request ]
 
   - name: lint
-    image: vikunja/golang-build:latest
+    image: golang:1.19-alpine
     pull: true
     environment:
       GOPROXY: 'https://goproxy.kolaente.de'
     depends_on: [ build ]
     commands:
-      - wget -O - -q https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.31.0
+      - export "GOROOT=$(go env GOROOT)"
+      - apk --no-cache add build-base git
+      - wget -O - -q https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.49.0
       - ./mage-static check:all
     when:
       event: [ push, tag, pull_request ]
@@ -97,14 +154,17 @@ steps:
       - unzip vikunja-latest.zip vikunja-unstable-linux-amd64
 
   - name: test-migration-sqlite
-    image: kolaente/toolbox:latest
+    image: vikunja/golang-build:latest
     pull: true
     depends_on: [ test-migration-prepare, build ]
     environment:
       VIKUNJA_DATABASE_TYPE: sqlite
-      VIKUNJA_DATABASE_PATH: ./vikunja-migration-test.db
+      VIKUNJA_DATABASE_PATH: /db/vikunja-migration-test.db
       VIKUNJA_LOG_DATABASE: stdout
       VIKUNJA_LOG_DATABASELEVEL: debug
+    volumes:
+      - name: tmp-sqlite-migration
+        path: /db
     commands:
       - ./vikunja-unstable-linux-amd64 migrate
       # Run the migrations from the binary build in the step before
@@ -113,7 +173,7 @@ steps:
       event: [ push, tag, pull_request ]
 
   - name: test-migration-mysql
-    image: kolaente/toolbox:latest
+    image: vikunja/golang-build:latest
     pull: true
     depends_on: [ test-migration-prepare, build ]
     environment:
@@ -132,7 +192,7 @@ steps:
       event: [ push, tag, pull_request ]
 
   - name: test-migration-psql
-    image: kolaente/toolbox:latest
+    image: vikunja/golang-build:latest
     pull: true
     depends_on: [ test-migration-prepare, build ]
     environment:
@@ -169,6 +229,10 @@ steps:
       GOPROXY: 'https://goproxy.kolaente.de'
       VIKUNJA_TESTS_USE_CONFIG: 1
       VIKUNJA_DATABASE_TYPE: sqlite
+      VIKUNJA_DATABASE_PATH: /db/vikunja-test.db
+    volumes:
+      - name: tmp-sqlite-unit
+        path: /db
     commands:
       - ./mage-static test:unit
     depends_on: [ fetch-tags, mage ]
@@ -228,6 +292,10 @@ steps:
       GOPROXY: 'https://goproxy.kolaente.de'
       VIKUNJA_TESTS_USE_CONFIG: 1
       VIKUNJA_DATABASE_TYPE: sqlite
+      VIKUNJA_DATABASE_PATH: /db/vikunja-test.db
+    volumes:
+      - name: tmp-sqlite-integration
+        path: /db
     commands:
       - ./mage-static test:integration
     depends_on: [ fetch-tags, mage ]
@@ -393,7 +461,7 @@ steps:
 
   # Push the releases to our pseudo-s3-bucket
   - name: release-latest
-    image: plugins/s3:1
+    image: plugins/s3
     pull: true
     settings:
       bucket: vikunja-releases
@@ -415,7 +483,7 @@ steps:
     depends_on: [ sign-release ]
 
   - name: release-version
-    image: plugins/s3:1
+    image: plugins/s3
     pull: true
     settings:
       bucket: vikunja-releases
@@ -435,7 +503,7 @@ steps:
     depends_on: [ sign-release ]
 
   # Build os packages and push it to our bucket
-  - name: build-os-packages
+  - name: build-os-packages-unstable
     image: goreleaser/nfpm
     pull: true
     commands:
@@ -444,11 +512,30 @@ steps:
       - mv dist/os-packages/vikunja*.x86_64.rpm dist/os-packages/vikunja-unstable-x86_64.rpm
       - mv dist/os-packages/vikunja*_amd64.deb dist/os-packages/vikunja-unstable-amd64.deb
       - mv dist/os-packages/vikunja*_x86_64.apk dist/os-packages/vikunja-unstable-x86_64.apk
+    when:
+      branch:
+        - main
+      event:
+        - push
+    depends_on: [ static-build-linux ]
+
+  - name: build-os-packages-version
+    image: goreleaser/nfpm
+    pull: true
+    commands:
+      - apk add git go
+      - ./mage-static release:packages
+      - mv dist/os-packages/vikunja*.x86_64.rpm dist/os-packages/vikunja-${DRONE_TAG##v}-x86_64.rpm
+      - mv dist/os-packages/vikunja*_amd64.deb dist/os-packages/vikunja-${DRONE_TAG##v}-amd64.deb
+      - mv dist/os-packages/vikunja*_x86_64.apk dist/os-packages/vikunja-${DRONE_TAG##v}-x86_64.apk
+    when:
+      event:
+        - tag
     depends_on: [ static-build-linux ]
 
   # Push the os releases to our pseudo-s3-bucket
   - name: release-os-latest
-    image: plugins/s3:1
+    image: plugins/s3
     pull: true
     settings:
       bucket: vikunja-releases
@@ -467,10 +554,10 @@ steps:
         - main
       event:
         - push
-    depends_on: [ build-os-packages ]
+    depends_on: [ build-os-packages-unstable ]
 
   - name: release-os-version
-    image: plugins/s3:1
+    image: plugins/s3
     pull: true
     settings:
       bucket: vikunja-releases
@@ -487,44 +574,7 @@ steps:
     when:
       event:
         - tag
-    depends_on: [ build-os-packages ]
-
-  ### Broken, disabled until we figure out how to fix it
-  #  - name: deb-structure
-  #    image: kolaente/reprepro
-  #    pull: true
-  #    environment:
-  #      GPG_PRIVATE_KEY:
-  #        from_secret: gpg_privatekey
-  #    commands:
-  #      - export GPG_TTY=$(tty)
-  #      - gpg -qk
-  #      - echo "use-agent" >>  ~/.gnupg/gpg.conf
-  #      - gpgconf --kill gpg-agent
-  #      - echo $GPG_PRIVATE_KEY > ~/frederik.gpg
-  #      - gpg --import ~/frederik.gpg
-  #      - mkdir debian/conf -p
-  #      - cp build/reprepro-dist-conf debian/conf/distributions
-  #      - ./mage-static release:reprepro
-  #    depends_on: [ build-os-packages ]
-
-  # Push the releases to our pseudo-s3-bucket
-  - name: release-deb
-    image: plugins/s3:1
-    pull: true
-    settings:
-      bucket: vikunja-releases
-      access_key:
-        from_secret: aws_access_key_id
-      secret_key:
-        from_secret: aws_secret_access_key
-      endpoint: https://s3.fr-par.scw.cloud
-      region: fr-par
-      path_style: true
-      strip_prefix: debian
-      source: debian/*/*/*/*/*
-      target: /deb/
-#    depends_on: [ deb-structure ]
+    depends_on: [ build-os-packages-version ]
 
 ---
 kind: pipeline
@@ -555,7 +605,7 @@ steps:
       - tar -xzf vikunja-theme.tar.gz
 
   - name: build
-    image: monachus/hugo:v0.54.0
+    image: klakegg/hugo:0.104.2
     pull: true
     commands:
       - cd docs
@@ -596,7 +646,8 @@ steps:
     image: docker:git
     commands:
       - git fetch --tags
-  - name: docker-arm-latest
+
+  - name: docker-arm-unstable
     image: plugins/docker:linux-arm
     pull: true
     settings:
@@ -605,7 +656,8 @@ steps:
       password:
         from_secret: docker_password
       repo: vikunja/api
-      tags: latest-linux-arm
+      tags: unstable-linux-arm
+      dockerfile: Dockerfile.arm32
     depends_on: [ fetch-tags ]
     when:
       ref:
@@ -622,12 +674,13 @@ steps:
       repo: vikunja/api
       auto_tag: true
       auto_tag_suffix: linux-arm
+      dockerfile: Dockerfile.arm32
     depends_on: [ fetch-tags ]
     when:
       ref:
         - "refs/tags/**"
 
-  - name: docker-arm64-latest
+  - name: docker-arm64-unstable
     image: plugins/docker:linux-arm64
     pull: true
     settings:
@@ -636,7 +689,7 @@ steps:
       password:
         from_secret: docker_password
       repo: vikunja/api
-      tags: latest-linux-arm64
+      tags: unstable-linux-arm64
     depends_on: [ fetch-tags ]
     when:
       ref:
@@ -680,7 +733,8 @@ steps:
     image: docker:git
     commands:
       - git fetch --tags
-  - name: docker-latest
+
+  - name: docker-unstable
     image: plugins/docker:linux-amd64
     pull: true
     settings:
@@ -689,7 +743,7 @@ steps:
       password:
         from_secret: docker_password
       repo: vikunja/api
-      tags: latest-linux-amd64
+      tags: unstable-linux-amd64
     depends_on: [ fetch-tags ]
     when:
       ref:
@@ -726,13 +780,13 @@ depends_on:
   - docker-arm-release
 
 steps:
-  - name: manifest-latest
+  - name: manifest-unstable
     pull: always
     image: plugins/manifest
     settings:
-      tags: latest
+      tags: unstable
       ignore_missing: true
-      spec: docker-manifest-latest.tmpl
+      spec: docker-manifest-unstable.tmpl
       password:
         from_secret: docker_password
       username:
@@ -741,11 +795,28 @@ steps:
       ref:
         - refs/heads/main
 
-  - name: manifest
+  - name: manifest-release
     pull: always
     image: plugins/manifest
     settings:
       auto_tag: true
+      ignore_missing: true
+      spec: docker-manifest.tmpl
+      password:
+        from_secret: docker_password
+      username:
+        from_secret: docker_username
+    when:
+      ref:
+        - "refs/tags/**"
+
+  - name: manifest-release-latest
+    pull: always
+    image: plugins/manifest
+    depends_on:
+      - clone
+    settings:
+      tags: latest
       ignore_missing: true
       spec: docker-manifest.tmpl
       password:
@@ -788,3 +859,8 @@ steps:
       status:
         - success
         - failure
+---
+kind: signature
+hmac: 5500acb776acae4975592637767035c45af277f1f56c8d10ffd99f38761cd5c8
+
+...

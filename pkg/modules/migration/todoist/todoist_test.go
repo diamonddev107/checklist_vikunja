@@ -17,7 +17,7 @@
 package todoist
 
 import (
-	"io/ioutil"
+	"os"
 	"strconv"
 	"testing"
 	"time"
@@ -39,7 +39,7 @@ func TestConvertTodoistToVikunja(t *testing.T) {
 	time3, err := time.Parse(time.RFC3339Nano, "2014-10-21T08:25:05Z")
 	assert.NoError(t, err)
 	time3 = time3.In(config.GetTimeZone())
-	dueTime, err := time.Parse(time.RFC3339Nano, "2020-05-31T00:00:00Z")
+	dueTime, err := time.Parse(time.RFC3339Nano, "2020-05-31T23:59:00Z")
 	assert.NoError(t, err)
 	dueTime = dueTime.In(config.GetTimeZone())
 	dueTimeWithTime, err := time.Parse(time.RFC3339Nano, "2021-01-31T19:00:00Z")
@@ -47,7 +47,7 @@ func TestConvertTodoistToVikunja(t *testing.T) {
 	dueTimeWithTime = dueTimeWithTime.In(config.GetTimeZone())
 	nilTime, err := time.Parse(time.RFC3339Nano, "0001-01-01T00:00:00Z")
 	assert.NoError(t, err)
-	exampleFile, err := ioutil.ReadFile(config.ServiceRootpath.GetString() + "/pkg/modules/migration/wunderlist/testimage.jpg")
+	exampleFile, err := os.ReadFile(config.ServiceRootpath.GetString() + "/pkg/modules/migration/wunderlist/testimage.jpg")
 	assert.NoError(t, err)
 
 	makeTestItem := func(id, projectId int64, hasDueDate, hasLabels, done bool) *item {
@@ -375,210 +375,258 @@ func TestConvertTodoistToVikunja(t *testing.T) {
 		},
 	}
 
-	expectedHierachie := []*models.NamespaceWithLists{
+	expectedHierachie := []*models.NamespaceWithListsAndTasks{
 		{
 			Namespace: models.Namespace{
 				Title: "Migrated from todoist",
 			},
-			Lists: []*models.List{
+			Lists: []*models.ListWithTasksAndBuckets{
 				{
-					Title:       "Project1",
-					Description: "Lorem Ipsum dolor sit amet\nLorem Ipsum dolor sit amet 2\nLorem Ipsum dolor sit amet 3",
-					HexColor:    todoistColors[30],
+					List: models.List{
+						Title:       "Project1",
+						Description: "Lorem Ipsum dolor sit amet\nLorem Ipsum dolor sit amet 2\nLorem Ipsum dolor sit amet 3",
+						HexColor:    todoistColors[30],
+					},
 					Buckets: []*models.Bucket{
 						{
 							ID:    1234,
 							Title: "Some Bucket",
 						},
 					},
-					Tasks: []*models.Task{
+					Tasks: []*models.TaskWithComments{
 						{
-							Title:       "Task400000000",
-							Description: "Lorem Ipsum dolor sit amet",
-							Done:        false,
-							Created:     time1,
-							Reminders: []time.Time{
-								time.Date(2020, time.June, 15, 0, 0, 0, 0, time.UTC).In(config.GetTimeZone()),
-								time.Date(2020, time.June, 16, 7, 0, 0, 0, time.UTC).In(config.GetTimeZone()),
+							Task: models.Task{
+								Title:       "Task400000000",
+								Description: "Lorem Ipsum dolor sit amet",
+								Done:        false,
+								Created:     time1,
+								Reminders: []time.Time{
+									time.Date(2020, time.June, 15, 23, 59, 0, 0, time.UTC).In(config.GetTimeZone()),
+									time.Date(2020, time.June, 16, 7, 0, 0, 0, time.UTC).In(config.GetTimeZone()),
+								},
 							},
 						},
 						{
-							Title:       "Task400000001",
-							Description: "Lorem Ipsum dolor sit amet",
-							Done:        false,
-							Created:     time1,
-						},
-						{
-							Title:   "Task400000002",
-							Done:    false,
-							Created: time1,
-							Reminders: []time.Time{
-								time.Date(2020, time.July, 15, 7, 0, 0, 0, time.UTC).In(config.GetTimeZone()),
+							Task: models.Task{
+								Title:       "Task400000001",
+								Description: "Lorem Ipsum dolor sit amet",
+								Done:        false,
+								Created:     time1,
 							},
 						},
 						{
-							Title:       "Task400000003",
-							Description: "Lorem Ipsum dolor sit amet",
-							Done:        true,
-							DueDate:     dueTime,
-							Created:     time1,
-							DoneAt:      time3,
-							Labels:      vikunjaLabels,
-							Reminders: []time.Time{
-								time.Date(2020, time.June, 15, 7, 0, 0, 0, time.UTC).In(config.GetTimeZone()),
+							Task: models.Task{
+								Title:   "Task400000002",
+								Done:    false,
+								Created: time1,
+								Reminders: []time.Time{
+									time.Date(2020, time.July, 15, 7, 0, 0, 0, time.UTC).In(config.GetTimeZone()),
+								},
 							},
 						},
 						{
-							Title:   "Task400000004",
-							Done:    false,
-							Created: time1,
-							Labels:  vikunjaLabels,
-						},
-						{
-							Title:   "Task400000005",
-							Done:    true,
-							DueDate: dueTime,
-							Created: time1,
-							DoneAt:  time3,
-							Reminders: []time.Time{
-								time.Date(2020, time.June, 15, 7, 0, 0, 0, time.UTC).In(config.GetTimeZone()),
+							Task: models.Task{
+								Title:       "Task400000003",
+								Description: "Lorem Ipsum dolor sit amet",
+								Done:        true,
+								DueDate:     dueTime,
+								Created:     time1,
+								DoneAt:      time3,
+								Labels:      vikunjaLabels,
+								Reminders: []time.Time{
+									time.Date(2020, time.June, 15, 7, 0, 0, 0, time.UTC).In(config.GetTimeZone()),
+								},
 							},
 						},
 						{
-							Title:   "Task400000006",
-							Done:    true,
-							DueDate: dueTime,
-							Created: time1,
-							DoneAt:  time3,
-							RelatedTasks: map[models.RelationKind][]*models.Task{
-								models.RelationKindSubtask: {
+							Task: models.Task{
+								Title:   "Task400000004",
+								Done:    false,
+								Created: time1,
+								Labels:  vikunjaLabels,
+							},
+						},
+						{
+							Task: models.Task{
+								Title:   "Task400000005",
+								Done:    true,
+								DueDate: dueTime,
+								Created: time1,
+								DoneAt:  time3,
+								Reminders: []time.Time{
+									time.Date(2020, time.June, 15, 7, 0, 0, 0, time.UTC).In(config.GetTimeZone()),
+								},
+							},
+						},
+						{
+							Task: models.Task{
+								Title:   "Task400000006",
+								Done:    true,
+								DueDate: dueTime,
+								Created: time1,
+								DoneAt:  time3,
+								RelatedTasks: map[models.RelationKind][]*models.Task{
+									models.RelationKindSubtask: {
+										{
+											Title:    "Task with parent",
+											Done:     false,
+											Priority: 2,
+											Created:  time1,
+											DoneAt:   nilTime,
+										},
+									},
+								},
+							},
+						},
+						{
+							Task: models.Task{
+								Title:   "Task400000106",
+								Done:    true,
+								DueDate: dueTimeWithTime,
+								Created: time1,
+								DoneAt:  time3,
+								Labels:  vikunjaLabels,
+							},
+						},
+						{
+							Task: models.Task{
+								Title:   "Task400000107",
+								Done:    true,
+								Created: time1,
+								DoneAt:  time3,
+							},
+						},
+						{
+							Task: models.Task{
+								Title:   "Task400000108",
+								Done:    true,
+								Created: time1,
+								DoneAt:  time3,
+							},
+						},
+						{
+							Task: models.Task{
+								Title:    "Task400000109",
+								Done:     true,
+								Created:  time1,
+								DoneAt:   time3,
+								BucketID: 1234,
+							},
+						},
+					},
+				},
+				{
+					List: models.List{
+						Title:       "Project2",
+						Description: "Lorem Ipsum dolor sit amet 4\nLorem Ipsum dolor sit amet 5",
+						HexColor:    todoistColors[37],
+					},
+					Tasks: []*models.TaskWithComments{
+						{
+							Task: models.Task{
+								Title:   "Task400000007",
+								Done:    false,
+								DueDate: dueTime,
+								Created: time1,
+							},
+						},
+						{
+							Task: models.Task{
+								Title:   "Task400000008",
+								Done:    false,
+								DueDate: dueTime,
+								Created: time1,
+							},
+						},
+						{
+							Task: models.Task{
+								Title:   "Task400000009",
+								Done:    false,
+								Created: time1,
+								Reminders: []time.Time{
+									time.Date(2020, time.June, 15, 7, 0, 0, 0, time.UTC).In(config.GetTimeZone()),
+								},
+							},
+						},
+						{
+							Task: models.Task{
+								Title:       "Task400000010",
+								Description: "Lorem Ipsum dolor sit amet",
+								Done:        true,
+								Created:     time1,
+								DoneAt:      time3,
+							},
+						},
+						{
+							Task: models.Task{
+								Title:       "Task400000101",
+								Description: "Lorem Ipsum dolor sit amet",
+								Done:        false,
+								Created:     time1,
+								Attachments: []*models.TaskAttachment{
 									{
-										Title:    "Task with parent",
-										Done:     false,
-										Priority: 2,
-										Created:  time1,
-										DoneAt:   nilTime,
+										File: &files.File{
+											Name:        "file.md",
+											Mime:        "text/plain",
+											Size:        12345,
+											Created:     time1,
+											FileContent: exampleFile,
+										},
+										Created: time1,
 									},
 								},
 							},
 						},
 						{
-							Title:   "Task400000106",
-							Done:    true,
-							DueDate: dueTimeWithTime,
-							Created: time1,
-							DoneAt:  time3,
-							Labels:  vikunjaLabels,
+							Task: models.Task{
+								Title:   "Task400000102",
+								Done:    false,
+								DueDate: dueTime,
+								Created: time1,
+								Labels:  vikunjaLabels,
+							},
 						},
 						{
-							Title:   "Task400000107",
-							Done:    true,
-							Created: time1,
-							DoneAt:  time3,
+							Task: models.Task{
+								Title:   "Task400000103",
+								Done:    false,
+								Created: time1,
+								Labels:  vikunjaLabels,
+							},
 						},
 						{
-							Title:   "Task400000108",
-							Done:    true,
-							Created: time1,
-							DoneAt:  time3,
+							Task: models.Task{
+								Title:   "Task400000104",
+								Done:    false,
+								Created: time1,
+								Labels:  vikunjaLabels,
+							},
 						},
 						{
-							Title:    "Task400000109",
-							Done:     true,
-							Created:  time1,
-							DoneAt:   time3,
-							BucketID: 1234,
+							Task: models.Task{
+								Title:   "Task400000105",
+								Done:    false,
+								DueDate: dueTime,
+								Created: time1,
+								Labels:  vikunjaLabels,
+							},
 						},
 					},
 				},
 				{
-					Title:       "Project2",
-					Description: "Lorem Ipsum dolor sit amet 4\nLorem Ipsum dolor sit amet 5",
-					HexColor:    todoistColors[37],
-					Tasks: []*models.Task{
-						{
-							Title:   "Task400000007",
-							Done:    false,
-							DueDate: dueTime,
-							Created: time1,
-						},
-						{
-							Title:   "Task400000008",
-							Done:    false,
-							DueDate: dueTime,
-							Created: time1,
-						},
-						{
-							Title:   "Task400000009",
-							Done:    false,
-							Created: time1,
-							Reminders: []time.Time{
-								time.Date(2020, time.June, 15, 7, 0, 0, 0, time.UTC).In(config.GetTimeZone()),
-							},
-						},
-						{
-							Title:       "Task400000010",
-							Description: "Lorem Ipsum dolor sit amet",
-							Done:        true,
-							Created:     time1,
-							DoneAt:      time3,
-						},
-						{
-							Title:       "Task400000101",
-							Description: "Lorem Ipsum dolor sit amet",
-							Done:        false,
-							Created:     time1,
-							Attachments: []*models.TaskAttachment{
-								{
-									File: &files.File{
-										Name:        "file.md",
-										Mime:        "text/plain",
-										Size:        12345,
-										Created:     time1,
-										FileContent: exampleFile,
-									},
-									Created: time1,
-								},
-							},
-						},
-						{
-							Title:   "Task400000102",
-							Done:    false,
-							DueDate: dueTime,
-							Created: time1,
-							Labels:  vikunjaLabels,
-						},
-						{
-							Title:   "Task400000103",
-							Done:    false,
-							Created: time1,
-							Labels:  vikunjaLabels,
-						},
-						{
-							Title:   "Task400000104",
-							Done:    false,
-							Created: time1,
-							Labels:  vikunjaLabels,
-						},
-						{
-							Title:   "Task400000105",
-							Done:    false,
-							DueDate: dueTime,
-							Created: time1,
-							Labels:  vikunjaLabels,
-						},
+					List: models.List{
+						Title:      "Project3 - Archived",
+						HexColor:   todoistColors[37],
+						IsArchived: true,
 					},
-				},
-				{
-					Title:      "Project3 - Archived",
-					HexColor:   todoistColors[37],
-					IsArchived: true,
-					Tasks: []*models.Task{
+					Tasks: []*models.TaskWithComments{
 						{
-							Title:   "Task400000111",
-							Done:    true,
-							Created: time1,
-							DoneAt:  time3,
+							Task: models.Task{
+								Title:   "Task400000111",
+								Done:    true,
+								Created: time1,
+								DoneAt:  time3,
+							},
 						},
 					},
 				},
@@ -586,7 +634,8 @@ func TestConvertTodoistToVikunja(t *testing.T) {
 		},
 	}
 
-	hierachie, err := convertTodoistToVikunja(testSync)
+	doneItems := make(map[int64]*doneItem)
+	hierachie, err := convertTodoistToVikunja(testSync, doneItems)
 	assert.NoError(t, err)
 	assert.NotNil(t, hierachie)
 	if diff, equal := messagediff.PrettyDiff(hierachie, expectedHierachie); !equal {

@@ -19,6 +19,8 @@ package models
 import (
 	"testing"
 
+	"code.vikunja.io/api/pkg/events"
+
 	"code.vikunja.io/api/pkg/db"
 	"code.vikunja.io/api/pkg/user"
 	"github.com/stretchr/testify/assert"
@@ -41,6 +43,7 @@ func TestTaskComment_Create(t *testing.T) {
 		assert.Equal(t, int64(1), tc.Author.ID)
 		err = s.Commit()
 		assert.NoError(t, err)
+		events.AssertDispatched(t, &TaskCommentCreatedEvent{})
 
 		db.AssertExists(t, "task_comments", map[string]interface{}{
 			"id":        tc.ID,
@@ -61,6 +64,32 @@ func TestTaskComment_Create(t *testing.T) {
 		err := tc.Create(s, u)
 		assert.Error(t, err)
 		assert.True(t, IsErrTaskDoesNotExist(err))
+	})
+	t.Run("should send notifications for comment mentions", func(t *testing.T) {
+		db.LoadAndAssertFixtures(t)
+		s := db.NewSession()
+		defer s.Close()
+
+		task, err := GetTaskByIDSimple(s, 32)
+		assert.NoError(t, err)
+		tc := &TaskComment{
+			Comment: "Lorem Ipsum @user2",
+			TaskID:  32, // user2 has access to the list that task belongs to
+		}
+		err = tc.Create(s, u)
+		assert.NoError(t, err)
+		ev := &TaskCommentCreatedEvent{
+			Task:    &task,
+			Doer:    u,
+			Comment: tc,
+		}
+
+		events.TestListener(t, ev, &SendTaskCommentNotification{})
+		db.AssertExists(t, "notifications", map[string]interface{}{
+			"subject_id":    tc.ID,
+			"notifiable_id": 2,
+			"name":          (&TaskCommentNotification{}).Name(),
+		}, false)
 	})
 }
 
@@ -91,6 +120,16 @@ func TestTaskComment_Delete(t *testing.T) {
 		err := tc.Delete(s, u)
 		assert.Error(t, err)
 		assert.True(t, IsErrTaskCommentDoesNotExist(err))
+	})
+	t.Run("not the own comment", func(t *testing.T) {
+		db.LoadAndAssertFixtures(t)
+		s := db.NewSession()
+		defer s.Close()
+
+		tc := &TaskComment{ID: 1, TaskID: 1}
+		can, err := tc.CanDelete(s, &user.User{ID: 2})
+		assert.NoError(t, err)
+		assert.False(t, can)
 	})
 }
 
@@ -128,6 +167,16 @@ func TestTaskComment_Update(t *testing.T) {
 		assert.Error(t, err)
 		assert.True(t, IsErrTaskCommentDoesNotExist(err))
 	})
+	t.Run("not the own comment", func(t *testing.T) {
+		db.LoadAndAssertFixtures(t)
+		s := db.NewSession()
+		defer s.Close()
+
+		tc := &TaskComment{ID: 1, TaskID: 1}
+		can, err := tc.CanUpdate(s, &user.User{ID: 2})
+		assert.NoError(t, err)
+		assert.False(t, can)
+	})
 }
 
 func TestTaskComment_ReadOne(t *testing.T) {
@@ -138,7 +187,7 @@ func TestTaskComment_ReadOne(t *testing.T) {
 		s := db.NewSession()
 		defer s.Close()
 
-		tc := &TaskComment{ID: 1}
+		tc := &TaskComment{ID: 1, TaskID: 1}
 		err := tc.ReadOne(s, u)
 		assert.NoError(t, err)
 		assert.Equal(t, "Lorem Ipsum Dolor Sit Amet", tc.Comment)
@@ -195,7 +244,25 @@ func TestTaskComment_ReadAll(t *testing.T) {
 		comments := result.([]*TaskComment)
 		assert.NoError(t, err)
 		assert.Len(t, comments, 2)
-		assert.Equal(t, int64(-2), comments[1].AuthorID)
-		assert.NotNil(t, comments[1].Author)
+		var foundComment bool
+		for _, comment := range comments {
+			if comment.AuthorID == -2 {
+				foundComment = true
+			}
+			assert.NotNil(t, comment.Author)
+		}
+		assert.True(t, foundComment)
+	})
+	t.Run("normal", func(t *testing.T) {
+		db.LoadAndAssertFixtures(t)
+		s := db.NewSession()
+		defer s.Close()
+
+		tc := &TaskComment{TaskID: 35}
+		u := &user.User{ID: 1}
+		result, _, _, err := tc.ReadAll(s, u, "COMMENT 15", 0, -1)
+		resultComment := result.([]*TaskComment)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(15), resultComment[0].ID)
 	})
 }

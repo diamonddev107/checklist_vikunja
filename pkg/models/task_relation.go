@@ -19,6 +19,7 @@ package models
 import (
 	"time"
 
+	"xorm.io/builder"
 	"xorm.io/xorm"
 
 	"code.vikunja.io/api/pkg/user"
@@ -114,7 +115,7 @@ type RelatedTaskMap map[RelationKind][]*Task
 // @Security JWTKeyAuth
 // @Param relation body models.TaskRelation true "The relation object"
 // @Param taskID path int true "Task ID"
-// @Success 200 {object} models.TaskRelation "The created task relation object."
+// @Success 201 {object} models.TaskRelation "The created task relation object."
 // @Failure 400 {object} web.HTTPError "Invalid task relation object provided."
 // @Failure 500 {object} models.Message "Internal error"
 // @Router /tasks/{taskID}/relations [put]
@@ -208,9 +209,23 @@ func (rel *TaskRelation) Create(s *xorm.Session, a web.Auth) error {
 // @Failure 500 {object} models.Message "Internal error"
 // @Router /tasks/{taskID}/relations/{relationKind}/{otherTaskId} [delete]
 func (rel *TaskRelation) Delete(s *xorm.Session, a web.Auth) error {
+
+	cond := builder.Or(
+		builder.And(
+			builder.Eq{"task_id": rel.TaskID},
+			builder.Eq{"other_task_id": rel.OtherTaskID},
+			builder.Eq{"relation_kind": rel.RelationKind},
+		),
+		builder.And(
+			builder.Eq{"task_id": rel.OtherTaskID},
+			builder.Eq{"other_task_id": rel.TaskID},
+			builder.Eq{"relation_kind": rel.RelationKind},
+		),
+	)
+
 	// Check if the relation exists
 	exists, err := s.
-		Where("task_id = ? AND other_task_id = ? AND relation_kind = ?", rel.TaskID, rel.OtherTaskID, rel.RelationKind).
+		Where(cond).
 		Exist(&TaskRelation{})
 	if err != nil {
 		return err
@@ -223,6 +238,8 @@ func (rel *TaskRelation) Delete(s *xorm.Session, a web.Auth) error {
 		}
 	}
 
-	_, err = s.Delete(rel)
+	_, err = s.
+		Where(cond).
+		Delete(&TaskRelation{})
 	return err
 }

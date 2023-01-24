@@ -17,9 +17,13 @@
 package metrics
 
 import (
+	"strconv"
+
 	"code.vikunja.io/api/pkg/log"
 	"code.vikunja.io/api/pkg/modules/keyvalue"
+
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
@@ -45,8 +49,8 @@ var registry *prometheus.Registry
 func GetRegistry() *prometheus.Registry {
 	if registry == nil {
 		registry = prometheus.NewRegistry()
-		registry.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
-		registry.MustRegister(prometheus.NewGoCollector())
+		registry.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+		registry.MustRegister(collectors.NewGoCollector())
 	}
 
 	return registry
@@ -132,7 +136,11 @@ func GetCount(key string) (count int64, err error) {
 		return 0, nil
 	}
 
-	count = cnt.(int64)
+	if s, is := cnt.(string); is {
+		count, err = strconv.ParseInt(s, 10, 64)
+	} else {
+		count = cnt.(int64)
+	}
 
 	return
 }

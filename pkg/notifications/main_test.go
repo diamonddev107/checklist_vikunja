@@ -20,11 +20,10 @@ import (
 	"os"
 	"testing"
 
+	"code.vikunja.io/api/pkg/config"
 	"code.vikunja.io/api/pkg/db"
 	"code.vikunja.io/api/pkg/log"
 	"code.vikunja.io/api/pkg/mail"
-
-	"code.vikunja.io/api/pkg/config"
 )
 
 // SetupTests initializes all db tests

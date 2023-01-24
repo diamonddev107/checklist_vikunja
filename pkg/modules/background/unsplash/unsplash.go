@@ -61,6 +61,7 @@ type Photo struct {
 	Height      int    `json:"height"`
 	Color       string `json:"color"`
 	Description string `json:"description"`
+	BlurHash    string `json:"blur_hash"`
 	User        struct {
 		Username string `json:"username"`
 		Name     string `json:"name"`
@@ -122,7 +123,8 @@ func getImageID(fullURL string) string {
 // Gets an unsplash photo either from cache or directly from the unsplash api
 func getUnsplashPhotoInfoByID(photoID string) (photo *Photo, err error) {
 
-	p, exists, err := keyvalue.Get(cachePrefix + photoID)
+	photo = &Photo{}
+	exists, err := keyvalue.GetWithValue(cachePrefix+photoID, photo)
 	if err != nil {
 		return nil, err
 	}
@@ -134,8 +136,6 @@ func getUnsplashPhotoInfoByID(photoID string) (photo *Photo, err error) {
 		if err != nil {
 			return
 		}
-	} else {
-		photo = p.(*Photo)
 	}
 	return
 }
@@ -164,14 +164,14 @@ func (p *Provider) Search(s *xorm.Session, search string, page int64) (result []
 		}
 
 		if existsForPage {
-			log.Debugf("Serving initial unsplash collection for page %d from cache, last updated at %v", page, emptySearchResult.lastCached)
+			log.Debugf("Serving initial wallpaper topic from unsplash for page %d from cache, last updated at %v", page, emptySearchResult.lastCached)
 			return emptySearchResult.images[page], nil
 		}
 
-		log.Debugf("Retrieving initial unsplash collection for page %d from unsplash api", page)
+		log.Debugf("Retrieving initial wallpaper topic from unsplash for page %d from unsplash api", page)
 
 		collectionResult := []*Photo{}
-		err = doGet("collections/317099/photos?page="+strconv.FormatInt(page, 10)+"&per_page=25&order_by=latest", &collectionResult)
+		err = doGet("topics/wallpapers/photos?page="+strconv.FormatInt(page, 10)+"&per_page=25&order_by=latest", &collectionResult)
 		if err != nil {
 			return
 		}
@@ -179,8 +179,9 @@ func (p *Provider) Search(s *xorm.Session, search string, page int64) (result []
 		result = []*background.Image{}
 		for _, p := range collectionResult {
 			result = append(result, &background.Image{
-				ID:  p.ID,
-				URL: getImageID(p.Urls.Raw),
+				ID:       p.ID,
+				URL:      getImageID(p.Urls.Raw),
+				BlurHash: p.BlurHash,
 				Info: &models.UnsplashPhoto{
 					UnsplashID: p.ID,
 					Author:     p.User.Username,
@@ -214,8 +215,9 @@ func (p *Provider) Search(s *xorm.Session, search string, page int64) (result []
 	result = []*background.Image{}
 	for _, p := range searchResult.Results {
 		result = append(result, &background.Image{
-			ID:  p.ID,
-			URL: getImageID(p.Urls.Raw),
+			ID:       p.ID,
+			URL:      getImageID(p.Urls.Raw),
+			BlurHash: p.BlurHash,
 			Info: &models.UnsplashPhoto{
 				UnsplashID: p.ID,
 				Author:     p.User.Username,
@@ -316,7 +318,7 @@ func (p *Provider) Set(s *xorm.Session, image *background.Image, list *models.Li
 	list.BackgroundInformation = unsplashPhoto
 
 	// Set it as the list background
-	return models.SetListBackground(s, list.ID, file)
+	return models.SetListBackground(s, list.ID, file, photo.BlurHash)
 }
 
 // Pingback pings the unsplash api if an unsplash photo has been accessed.

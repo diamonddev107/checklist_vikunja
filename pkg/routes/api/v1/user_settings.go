@@ -17,19 +17,22 @@
 package v1
 
 import (
+	"errors"
+	"fmt"
 	"net/http"
 
-	"code.vikunja.io/api/pkg/db"
+	"github.com/labstack/echo/v4"
+	"github.com/tkuchiki/go-timezone"
 
+	"code.vikunja.io/api/pkg/db"
 	"code.vikunja.io/api/pkg/models"
 	user2 "code.vikunja.io/api/pkg/user"
 	"code.vikunja.io/web/handler"
-	"github.com/labstack/echo/v4"
 )
 
 // UserAvatarProvider holds the user avatar provider type
 type UserAvatarProvider struct {
-	// The avatar provider. Valid types are `gravatar` (uses the user email), `upload`, `initials`, `default`.
+	// The avatar provider. Valid types are `gravatar` (uses the user email), `upload`, `initials`, `marble` (generates a random avatar for each user), `default`.
 	AvatarProvider string `json:"avatar_provider"`
 }
 
@@ -45,6 +48,17 @@ type UserSettings struct {
 	DiscoverableByEmail bool `json:"discoverable_by_email"`
 	// If enabled, the user will get an email for their overdue tasks each morning.
 	OverdueTasksRemindersEnabled bool `json:"overdue_tasks_reminders_enabled"`
+	// The time when the daily summary of overdue tasks will be sent via email.
+	OverdueTasksRemindersTime string `json:"overdue_tasks_reminders_time" valid:"time,required"`
+	// If a task is created without a specified list this value should be used. Applies
+	// to tasks made directly in API and from clients.
+	DefaultListID int64 `json:"default_list_id"`
+	// The day when the week starts for this user. 0 = sunday, 1 = monday, etc.
+	WeekStart int `json:"week_start" valid:"range(0|7)"`
+	// The user's language
+	Language string `json:"language"`
+	// The user's time zone. Used to send task reminders in the time zone of the user.
+	Timezone string `json:"timezone"`
 }
 
 // GetUserAvatarProvider returns the currently set user avatar
@@ -148,7 +162,16 @@ func UpdateGeneralUserSettings(c echo.Context) error {
 	us := &UserSettings{}
 	err := c.Bind(us)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Bad user name provided.")
+		var he *echo.HTTPError
+		if errors.As(err, &he) {
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid model provided. Error was: %s", he.Message))
+		}
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid model provided.")
+	}
+
+	err = c.Validate(us)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err)
 	}
 
 	u, err := user2.GetCurrentUser(c)
@@ -170,6 +193,11 @@ func UpdateGeneralUserSettings(c echo.Context) error {
 	user.DiscoverableByEmail = us.DiscoverableByEmail
 	user.DiscoverableByName = us.DiscoverableByName
 	user.OverdueTasksRemindersEnabled = us.OverdueTasksRemindersEnabled
+	user.DefaultListID = us.DefaultListID
+	user.WeekStart = us.WeekStart
+	user.Language = us.Language
+	user.Timezone = us.Timezone
+	user.OverdueTasksRemindersTime = us.OverdueTasksRemindersTime
 
 	_, err = user2.UpdateUser(s, user)
 	if err != nil {
@@ -183,4 +211,32 @@ func UpdateGeneralUserSettings(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, &models.Message{Message: "The settings were updated successfully."})
+}
+
+// GetAvailableTimezones
+// @Summary Get all available time zones on this vikunja instance
+// @Description Because available time zones depend on the system Vikunja is running on, this endpoint returns a list of all valid time zones this particular Vikunja instance can handle. The list of time zones is not sorted, you should sort it on the client.
+// @tags user
+// @Accept json
+// @Produce json
+// @Security JWTKeyAuth
+// @Success 200 {array} string "All available time zones."
+// @Failure 500 {object} models.Message "Internal server error."
+// @Router /user/timezones [get]
+func GetAvailableTimezones(c echo.Context) error {
+
+	allTimezones := timezone.New().Timezones()
+	timezoneMap := make(map[string]bool) // to filter all duplicates
+	for _, s := range allTimezones {
+		for _, t := range s {
+			timezoneMap[t] = true
+		}
+	}
+
+	ts := []string{}
+	for s := range timezoneMap {
+		ts = append(ts, s)
+	}
+
+	return c.JSON(http.StatusOK, ts)
 }

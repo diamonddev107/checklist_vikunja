@@ -19,7 +19,6 @@ package db
 import (
 	"encoding/gob"
 	"fmt"
-	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -28,9 +27,9 @@ import (
 	"code.vikunja.io/api/pkg/config"
 	"code.vikunja.io/api/pkg/log"
 	xrc "gitea.com/xorm/xorm-redis-cache"
-	"xorm.io/core"
 	"xorm.io/xorm"
 	"xorm.io/xorm/caches"
+	"xorm.io/xorm/names"
 	"xorm.io/xorm/schemas"
 
 	_ "github.com/go-sql-driver/mysql" // Because.
@@ -81,7 +80,7 @@ func CreateDBEngine() (engine *xorm.Engine, err error) {
 		log.Fatalf("Error parsing time zone: %s", err)
 	}
 	engine.SetTZDatabase(loc)
-	engine.SetMapper(core.GonicMapper{})
+	engine.SetMapper(names.GonicMapper{})
 	logger := log.NewXormLogger("")
 	engine.SetLogger(logger)
 
@@ -150,13 +149,17 @@ func parsePostgreSQLHostPort(info string) (string, string) {
 
 func initPostgresEngine() (engine *xorm.Engine, err error) {
 	host, port := parsePostgreSQLHostPort(config.DatabaseHost.GetString())
-	connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+	// postgresql://username:password@host:port/dbname[?paramspec]
+	connStr := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s&sslcert=%s&sslkey=%s&sslrootcert=%s",
+		config.DatabaseUser.GetString(),
+		config.DatabasePassword.GetString(),
 		host,
 		port,
-		url.PathEscape(config.DatabaseUser.GetString()),
-		url.PathEscape(config.DatabasePassword.GetString()),
 		config.DatabaseDatabase.GetString(),
 		config.DatabaseSslMode.GetString(),
+		config.DatabaseSslCert.GetString(),
+		config.DatabaseSslKey.GetString(),
+		config.DatabaseSslRootCert.GetString(),
 	)
 
 	engine, err = xorm.NewEngine("postgres", connStr)
@@ -186,7 +189,7 @@ func initSqliteEngine() (engine *xorm.Engine, err error) {
 	}
 	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0)
 	if err != nil {
-		return nil, fmt.Errorf("could not open database file [uid=%d, gid=%d]: %s", os.Getuid(), os.Getgid(), err)
+		return nil, fmt.Errorf("could not open database file [uid=%d, gid=%d]: %w", os.Getuid(), os.Getgid(), err)
 	}
 	_ = file.Close() // We directly close the file because we only want to check if it is writable. It will be reopened lazily later by xorm.
 

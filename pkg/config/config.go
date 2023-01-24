@@ -21,8 +21,10 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 	_ "time/tzdata" // Imports time zone data instead of relying on the os
@@ -37,12 +39,17 @@ type Key string
 const (
 	// #nosec
 	ServiceJWTSecret       Key = `service.JWTSecret`
+	ServiceJWTTTL          Key = `service.jwtttl`
+	ServiceJWTTTLLong      Key = `service.jwtttllong`
 	ServiceInterface       Key = `service.interface`
+	ServiceUnixSocket      Key = `service.unixsocket`
+	ServiceUnixSocketMode  Key = `service.unixsocketmode`
 	ServiceFrontendurl     Key = `service.frontendurl`
 	ServiceEnableCaldav    Key = `service.enablecaldav`
 	ServiceRootpath        Key = `service.rootpath`
+	ServiceStaticpath      Key = `service.staticpath`
 	ServiceMaxItemsPerPage Key = `service.maxitemsperpage`
-	// Deprecated. Use metrics.enabled
+	// Deprecated: Use metrics.enabled
 	ServiceEnableMetrics         Key = `service.enablemetrics`
 	ServiceMotd                  Key = `service.motd`
 	ServiceEnableLinkSharing     Key = `service.enablelinksharing`
@@ -54,6 +61,8 @@ const (
 	ServiceSentryDsn             Key = `service.sentrydsn`
 	ServiceTestingtoken          Key = `service.testingtoken`
 	ServiceEnableEmailReminders  Key = `service.enableemailreminders`
+	ServiceEnableUserDeletion    Key = `service.enableuserdeletion`
+	ServiceMaxAvatarSize         Key = `service.maxavatarsize`
 
 	AuthLocalEnabled      Key = `auth.local.enabled`
 	AuthOpenIDEnabled     Key = `auth.openid.enabled`
@@ -73,6 +82,9 @@ const (
 	DatabaseMaxIdleConnections    Key = `database.maxidleconnections`
 	DatabaseMaxConnectionLifetime Key = `database.maxconnectionlifetime`
 	DatabaseSslMode               Key = `database.sslmode`
+	DatabaseSslCert               Key = `database.sslcert`
+	DatabaseSslKey                Key = `database.sslkey`
+	DatabaseSslRootCert           Key = `database.sslrootcert`
 	DatabaseTLS                   Key = `database.tls`
 
 	CacheEnabled        Key = `cache.enabled`
@@ -84,6 +96,7 @@ const (
 	MailerPort          Key = `mailer.port`
 	MailerUsername      Key = `mailer.username`
 	MailerPassword      Key = `mailer.password`
+	MailerAuthType      Key = `mailer.authtype`
 	MailerSkipTLSVerify Key = `mailer.skiptlsverify`
 	MailerFromEmail     Key = `mailer.fromemail`
 	MailerQueuelength   Key = `mailer.queuelength`
@@ -148,6 +161,18 @@ const (
 	MetricsEnabled  Key = `metrics.enabled`
 	MetricsUsername Key = `metrics.username`
 	MetricsPassword Key = `metrics.password`
+
+	DefaultSettingsAvatarProvider              Key = `defaultsettings.avatar_provider`
+	DefaultSettingsAvatarFileID                Key = `defaultsettings.avatar_file_id`
+	DefaultSettingsEmailRemindersEnabled       Key = `defaultsettings.email_reminders_enabled`
+	DefaultSettingsDiscoverableByName          Key = `defaultsettings.discoverable_by_name`
+	DefaultSettingsDiscoverableByEmail         Key = `defaultsettings.discoverable_by_email`
+	DefaultSettingsOverdueTaskRemindersEnabled Key = `defaultsettings.overdue_tasks_reminders_enabled`
+	DefaultSettingsDefaultListID               Key = `defaultsettings.default_list_id`
+	DefaultSettingsWeekStart                   Key = `defaultsettings.week_start`
+	DefaultSettingsLanguage                    Key = `defaultsettings.language`
+	DefaultSettingsTimezone                    Key = `defaultsettings.timezone`
+	DefaultSettingsOverdueTaskRemindersTime    Key = `defaultsettings.overdue_tasks_reminders_time`
 )
 
 // GetString returns a string config value
@@ -212,6 +237,39 @@ func (k Key) setDefault(i interface{}) {
 	viper.SetDefault(string(k), i)
 }
 
+// Tries different methods to figure out the binary folder.
+// Copied and adopted from https://github.com/speedata/publisher/commit/3b668668d57edef04ea854d5bbd58f83eb1b799f
+func getBinaryDirLocation() string {
+	// First, check if the standard library gives us the path. This will work 99% of the time.
+	ex, err := os.Executable()
+	if err == nil {
+		return filepath.Dir(ex)
+	}
+
+	// Then check if the binary was run with a full path and use that if that's the case.
+	if strings.Contains(os.Args[0], "/") {
+		binDir, err := filepath.Abs(filepath.Dir(os.Args[0]))
+		if err != nil {
+			log.Fatal(err)
+		}
+		return binDir
+	}
+
+	exeSuffix := ""
+	if runtime.GOOS == "windows" {
+		exeSuffix = ".exe"
+	}
+
+	// All else failing, search for a vikunja binary in the current $PATH.
+	// This can give wrong results.
+	exeLocation, err := exec.LookPath("vikunja" + exeSuffix)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return filepath.Dir(exeLocation)
+}
+
 // InitDefaultConfig sets default config values
 // This is an extra function so we can call it when initializing tests without initializing the full config
 func InitDefaultConfig() {
@@ -223,16 +281,15 @@ func InitDefaultConfig() {
 
 	// Service
 	ServiceJWTSecret.setDefault(random)
+	ServiceJWTTTL.setDefault(259200)      // 72 hours
+	ServiceJWTTTLLong.setDefault(2592000) // 30 days
 	ServiceInterface.setDefault(":3456")
+	ServiceUnixSocket.setDefault("")
 	ServiceFrontendurl.setDefault("")
 	ServiceEnableCaldav.setDefault(true)
 
-	ex, err := os.Executable()
-	if err != nil {
-		panic(err)
-	}
-	exPath := filepath.Dir(ex)
-	ServiceRootpath.setDefault(exPath)
+	ServiceRootpath.setDefault(getBinaryDirLocation())
+	ServiceStaticpath.setDefault("")
 	ServiceMaxItemsPerPage.setDefault(50)
 	ServiceEnableMetrics.setDefault(false)
 	ServiceMotd.setDefault("")
@@ -243,6 +300,8 @@ func InitDefaultConfig() {
 	ServiceEnableTaskComments.setDefault(true)
 	ServiceEnableTotp.setDefault(true)
 	ServiceEnableEmailReminders.setDefault(true)
+	ServiceEnableUserDeletion.setDefault(true)
+	ServiceMaxAvatarSize.setDefault(1024)
 
 	// Auth
 	AuthLocalEnabled.setDefault(true)
@@ -259,6 +318,9 @@ func InitDefaultConfig() {
 	DatabaseMaxIdleConnections.setDefault(50)
 	DatabaseMaxConnectionLifetime.setDefault(10000)
 	DatabaseSslMode.setDefault("disable")
+	DatabaseSslCert.setDefault("")
+	DatabaseSslKey.setDefault("")
+	DatabaseSslRootCert.setDefault("")
 	DatabaseTLS.setDefault("false")
 
 	// Cacher
@@ -269,13 +331,14 @@ func InitDefaultConfig() {
 	MailerEnabled.setDefault(false)
 	MailerHost.setDefault("")
 	MailerPort.setDefault("587")
-	MailerUsername.setDefault("user")
+	MailerUsername.setDefault("")
 	MailerPassword.setDefault("")
 	MailerSkipTLSVerify.setDefault(false)
 	MailerFromEmail.setDefault("mail@vikunja")
 	MailerQueuelength.setDefault(100)
 	MailerQueueTimeout.setDefault(30)
 	MailerForceSSL.setDefault(false)
+	MailerAuthType.setDefault("plain")
 	// Redis
 	RedisEnabled.setDefault(false)
 	RedisHost.setDefault("localhost:6379")
@@ -320,6 +383,10 @@ func InitDefaultConfig() {
 	KeyvalueType.setDefault("memory")
 	// Metrics
 	MetricsEnabled.setDefault(false)
+	// Settings
+	DefaultSettingsAvatarProvider.setDefault("initials")
+	DefaultSettingsOverdueTaskRemindersEnabled.setDefault(true)
+	DefaultSettingsOverdueTaskRemindersTime.setDefault("9:00")
 }
 
 // InitConfig initializes the config, sets defaults etc.
@@ -346,11 +413,17 @@ func InitConfig() {
 
 	viper.AddConfigPath(".")
 	viper.SetConfigName("config")
+
 	err = viper.ReadInConfig()
-	if err != nil {
-		log.Println(err.Error())
-		log.Println("Using default config.")
-		return
+	if viper.ConfigFileUsed() != "" {
+		log.Printf("Using config file: %s", viper.ConfigFileUsed())
+
+		if err != nil {
+			log.Println(err.Error())
+			log.Println("Using default config.")
+		}
+	} else {
+		log.Println("No config file found, using default or config from environment variables.")
 	}
 
 	if CacheType.GetString() == "keyvalue" {
@@ -361,8 +434,16 @@ func InitConfig() {
 		RateLimitStore.Set(KeyvalueType.GetString())
 	}
 
+	if ServiceFrontendurl.GetString() != "" && !strings.HasSuffix(ServiceFrontendurl.GetString(), "/") {
+		ServiceFrontendurl.Set(ServiceFrontendurl.GetString() + "/")
+	}
+
 	if AuthOpenIDRedirectURL.GetString() == "" {
 		AuthOpenIDRedirectURL.Set(ServiceFrontendurl.GetString() + "auth/openid/")
+	}
+
+	if MigrationTodoistRedirectURL.GetString() == "" {
+		MigrationTodoistRedirectURL.Set(ServiceFrontendurl.GetString() + "migrate/todoist")
 	}
 
 	if MigrationTrelloRedirectURL.GetString() == "" {
@@ -373,12 +454,14 @@ func InitConfig() {
 		MigrationMicrosoftTodoRedirectURL.Set(ServiceFrontendurl.GetString() + "migrate/microsoft-todo")
 	}
 
+	if DefaultSettingsTimezone.GetString() == "" {
+		DefaultSettingsTimezone.Set(ServiceTimeZone.GetString())
+	}
+
 	if ServiceEnableMetrics.GetBool() {
 		log.Println("WARNING: service.enablemetrics is deprecated and will be removed in a future release. Please use metrics.enable.")
 		MetricsEnabled.Set(true)
 	}
-
-	log.Printf("Using config file: %s", viper.ConfigFileUsed())
 }
 
 func random(length int) (string, error) {

@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"net/url"
 	"sort"
+	"strconv"
 	"time"
 
 	"code.vikunja.io/api/pkg/config"
@@ -102,6 +103,24 @@ type item struct {
 	DateAdded       time.Time   `json:"date_added"`
 	HasMoreNotes    bool        `json:"has_more_notes"`
 	DateCompleted   time.Time   `json:"date_completed"`
+}
+
+type itemWrapper struct {
+	Item *item `json:"item"`
+}
+
+type doneItem struct {
+	CompletedDate time.Time `json:"completed_date"`
+	Content       string    `json:"content"`
+	ID            int64     `json:"id"`
+	ProjectID     int64     `json:"project_id"`
+	TaskID        int64     `json:"task_id"`
+	UserID        int       `json:"user_id"`
+}
+
+type doneItemSync struct {
+	Items    []*doneItem         `json:"items"`
+	Projects map[string]*project `json:"projects"`
 }
 
 type fileAttachment struct {
@@ -227,6 +246,15 @@ func (m *Migration) AuthURL() string {
 }
 
 func parseDate(dateString string) (date time.Time, err error) {
+	if len(dateString) == 10 {
+		// We're probably dealing with a date in the form of 2021-11-23 without a time
+		date, err = time.Parse("2006-01-02", dateString)
+		if err == nil {
+			// round the day to eod
+			return date.Add(time.Hour*23 + time.Minute*59), nil
+		}
+	}
+
 	date, err = time.Parse("2006-01-02T15:04:05Z", dateString)
 	if err != nil {
 		date, err = time.Parse("2006-01-02T15:04:05", dateString)
@@ -238,28 +266,30 @@ func parseDate(dateString string) (date time.Time, err error) {
 	return date, err
 }
 
-func convertTodoistToVikunja(sync *sync) (fullVikunjaHierachie []*models.NamespaceWithLists, err error) {
+func convertTodoistToVikunja(sync *sync, doneItems map[int64]*doneItem) (fullVikunjaHierachie []*models.NamespaceWithListsAndTasks, err error) {
 
-	newNamespace := &models.NamespaceWithLists{
+	newNamespace := &models.NamespaceWithListsAndTasks{
 		Namespace: models.Namespace{
 			Title: "Migrated from todoist",
 		},
 	}
 
 	// A map for all vikunja lists with the project id they're coming from as key
-	lists := make(map[int64]*models.List, len(sync.Projects))
+	lists := make(map[int64]*models.ListWithTasksAndBuckets, len(sync.Projects))
 
 	// A map for all vikunja tasks with the todoist task id as key to find them easily and add more data
-	tasks := make(map[int64]*models.Task, len(sync.Items))
+	tasks := make(map[int64]*models.TaskWithComments, len(sync.Items))
 
 	// A map for all vikunja labels with the todoist id as key to find them easier
 	labels := make(map[int64]*models.Label, len(sync.Labels))
 
 	for _, p := range sync.Projects {
-		list := &models.List{
-			Title:      p.Name,
-			HexColor:   todoistColors[p.Color],
-			IsArchived: p.IsArchived == 1,
+		list := &models.ListWithTasksAndBuckets{
+			List: models.List{
+				Title:      p.Name,
+				HexColor:   todoistColors[p.Color],
+				IsArchived: p.IsArchived == 1,
+			},
 		}
 
 		lists[p.ID] = list
@@ -291,17 +321,25 @@ func convertTodoistToVikunja(sync *sync) (fullVikunjaHierachie []*models.Namespa
 	}
 
 	for _, i := range sync.Items {
-		task := &models.Task{
-			Title:    i.Content,
-			Created:  i.DateAdded.In(config.GetTimeZone()),
-			Done:     i.Checked == 1,
-			BucketID: i.SectionID,
+		task := &models.TaskWithComments{
+			Task: models.Task{
+				Title:    i.Content,
+				Created:  i.DateAdded.In(config.GetTimeZone()),
+				Done:     i.Checked == 1,
+				BucketID: i.SectionID,
+			},
 		}
 
 		// Only try to parse the task done at date if the task is actually done
 		// Sometimes weired things happen if we try to parse nil dates.
 		if task.Done {
 			task.DoneAt = i.DateCompleted.In(config.GetTimeZone())
+		}
+
+		done, has := doneItems[i.ID]
+		if has {
+			task.Done = true
+			task.DoneAt = done.CompletedDate.In(config.GetTimeZone())
 		}
 
 		// Todoist priorities only range from 1 (lowest) and max 4 (highest), so we need to make slight adjustments
@@ -325,6 +363,11 @@ func convertTodoistToVikunja(sync *sync) (fullVikunjaHierachie []*models.Namespa
 
 		tasks[i.ID] = task
 
+		if _, exists := lists[i.ProjectID]; !exists {
+			log.Debugf("[Todoist Migration] Tried to put item %d in project %d but the project does not exist", i.ID, i.ProjectID)
+			continue
+		}
+
 		lists[i.ProjectID].Tasks = append(lists[i.ProjectID].Tasks, task)
 	}
 
@@ -345,7 +388,7 @@ func convertTodoistToVikunja(sync *sync) (fullVikunjaHierachie []*models.Namespa
 			tasks[i.ParentID].RelatedTasks = make(models.RelatedTaskMap)
 		}
 
-		tasks[i.ParentID].RelatedTasks[models.RelationKindSubtask] = append(tasks[i.ParentID].RelatedTasks[models.RelationKindSubtask], tasks[i.ID])
+		tasks[i.ParentID].RelatedTasks[models.RelationKindSubtask] = append(tasks[i.ParentID].RelatedTasks[models.RelationKindSubtask], &tasks[i.ID].Task)
 
 		// Remove the task from the top level structure, otherwise it is added twice
 	outer:
@@ -418,6 +461,7 @@ func convertTodoistToVikunja(sync *sync) (fullVikunjaHierachie []*models.Namespa
 
 		if _, exists := tasks[r.ItemID]; !exists {
 			log.Debugf("Could not find task %d for reminder %d while trying to resolve reminders", r.ItemID, r.ID)
+			continue
 		}
 
 		date, err := parseDate(r.Due.Date)
@@ -428,7 +472,7 @@ func convertTodoistToVikunja(sync *sync) (fullVikunjaHierachie []*models.Namespa
 		tasks[r.ItemID].Reminders = append(tasks[r.ItemID].Reminders, date.In(config.GetTimeZone()))
 	}
 
-	return []*models.NamespaceWithLists{
+	return []*models.NamespaceWithListsAndTasks{
 		newNamespace,
 	}, err
 }
@@ -505,10 +549,109 @@ func (m *Migration) Migrate(u *user.User) (err error) {
 		return
 	}
 
+	log.Debugf("[Todoist Migration] Getting done items for user %d", u.ID)
+
+	// Get all done tasks and projects
+	offset := 0
+	doneItems := make(map[int64]*doneItem)
+
+	for {
+		resp, err = migration.DoPost("https://api.todoist.com/sync/v8/completed/get_all?limit=200&offset="+strconv.Itoa(offset), form)
+		if err != nil {
+			return
+		}
+		defer resp.Body.Close()
+
+		completedSyncResponse := &doneItemSync{}
+		err = json.NewDecoder(resp.Body).Decode(completedSyncResponse)
+		if err != nil {
+			return
+		}
+
+		sort.Slice(completedSyncResponse.Items, func(i, j int) bool {
+			return completedSyncResponse.Items[i].CompletedDate.After(completedSyncResponse.Items[j].CompletedDate)
+		})
+
+		for _, i := range completedSyncResponse.Items {
+			if _, has := doneItems[i.TaskID]; has {
+				// Only set the newest completion date
+				continue
+			}
+			doneItems[i.TaskID] = i
+
+			// need to get done item data
+			resp, err = migration.DoPost("https://api.todoist.com/sync/v8/items/get", url.Values{
+				"token":   []string{token},
+				"item_id": []string{strconv.FormatInt(i.TaskID, 10)},
+			})
+			if err != nil {
+				return
+			}
+			defer resp.Body.Close()
+
+			doneI := &itemWrapper{}
+			err = json.NewDecoder(resp.Body).Decode(doneI)
+			if err != nil {
+				return
+			}
+			log.Debugf("[Todoist Migration] Retrieved full task data for done task %d", i.TaskID)
+			syncResponse.Items = append(syncResponse.Items, doneI.Item)
+		}
+
+		if len(completedSyncResponse.Items) < 200 {
+			break
+		}
+		offset++
+		log.Debugf("[Todoist Migration] User %d has more than 200 done tasks or projects, looping to get more; iteration %d", u.ID, offset)
+	}
+
+	log.Debugf("[Todoist Migration] Got %d done items for user %d", len(doneItems), u.ID)
+	log.Debugf("[Todoist Migration] Getting archived projects for user %d", u.ID)
+
+	// Get all archived projects
+	resp, err = migration.DoPost("https://api.todoist.com/sync/v8/projects/get_archived", form)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+
+	archivedProjects := []*project{}
+	err = json.NewDecoder(resp.Body).Decode(&archivedProjects)
+	if err != nil {
+		return
+	}
+	syncResponse.Projects = append(syncResponse.Projects, archivedProjects...)
+
+	log.Debugf("[Todoist Migration] Got %d archived projects for user %d", len(archivedProjects), u.ID)
+	log.Debugf("[Todoist Migration] Getting data for archived projects for user %d", u.ID)
+
+	// Project data is not included in the regular sync for archived projects so we need to get all of those by hand
+	//https://api.todoist.com/sync/v8/projects/get_data\?project_id\=2269005399
+	for _, p := range archivedProjects {
+		resp, err = migration.DoPost("https://api.todoist.com/sync/v8/projects/get_data?project_id="+strconv.FormatInt(p.ID, 10), form)
+		if err != nil {
+			return
+		}
+
+		archivedProjectData := &sync{}
+		err = json.NewDecoder(resp.Body).Decode(&archivedProjectData)
+		if err != nil {
+			return
+		}
+		resp.Body.Close()
+
+		syncResponse.Items = append(syncResponse.Items, archivedProjectData.Items...)
+		syncResponse.Labels = append(syncResponse.Labels, archivedProjectData.Labels...)
+		syncResponse.Notes = append(syncResponse.Notes, archivedProjectData.Notes...)
+		syncResponse.ProjectNotes = append(syncResponse.ProjectNotes, archivedProjectData.ProjectNotes...)
+		syncResponse.Reminders = append(syncResponse.Reminders, archivedProjectData.Reminders...)
+		syncResponse.Sections = append(syncResponse.Sections, archivedProjectData.Sections...)
+	}
+
 	log.Debugf("[Todoist Migration] Got all todoist user data for user %d", u.ID)
 	log.Debugf("[Todoist Migration] Start converting data for user %d", u.ID)
 
-	fullVikunjaHierachie, err := convertTodoistToVikunja(syncResponse)
+	fullVikunjaHierachie, err := convertTodoistToVikunja(syncResponse, doneItems)
 	if err != nil {
 		return
 	}

@@ -18,7 +18,7 @@ package trello
 
 import (
 	"bytes"
-	"io/ioutil"
+	"os"
 	"testing"
 	"time"
 
@@ -36,7 +36,7 @@ func TestConvertTrelloToVikunja(t *testing.T) {
 
 	time1, err := time.Parse(time.RFC3339Nano, "2014-09-26T08:25:05Z")
 	assert.NoError(t, err)
-	exampleFile, err := ioutil.ReadFile(config.ServiceRootpath.GetString() + "/pkg/modules/migration/wunderlist/testimage.jpg")
+	exampleFile, err := os.ReadFile(config.ServiceRootpath.GetString() + "/pkg/modules/migration/wunderlist/testimage.jpg")
 	assert.NoError(t, err)
 
 	trelloData := []*trello.Board{
@@ -187,16 +187,18 @@ func TestConvertTrelloToVikunja(t *testing.T) {
 	}
 	trelloData[0].Prefs.BackgroundImage = "https://vikunja.io/testimage.jpg" // Using an image which we are hosting, so it'll still be up
 
-	expectedHierachie := []*models.NamespaceWithLists{
+	expectedHierachie := []*models.NamespaceWithListsAndTasks{
 		{
 			Namespace: models.Namespace{
 				Title: "Imported from Trello",
 			},
-			Lists: []*models.List{
+			Lists: []*models.ListWithTasksAndBuckets{
 				{
-					Title:                 "TestBoard",
-					Description:           "This is a description",
-					BackgroundInformation: bytes.NewBuffer(exampleFile),
+					List: models.List{
+						Title:                 "TestBoard",
+						Description:           "This is a description",
+						BackgroundInformation: bytes.NewBuffer(exampleFile),
+					},
 					Buckets: []*models.Bucket{
 						{
 							ID:    1,
@@ -207,37 +209,40 @@ func TestConvertTrelloToVikunja(t *testing.T) {
 							Title: "Test List 2",
 						},
 					},
-					Tasks: []*models.Task{
+					Tasks: []*models.TaskWithComments{
 						{
-							Title:       "Test Card 1",
-							Description: "Card Description",
-							BucketID:    1,
-							Position:    123,
-							DueDate:     time1,
-							Labels: []*models.Label{
-								{
-									Title:    "Label 1",
-									HexColor: trelloColorMap["green"],
+							Task: models.Task{
+								Title:          "Test Card 1",
+								Description:    "Card Description",
+								BucketID:       1,
+								KanbanPosition: 123,
+								DueDate:        time1,
+								Labels: []*models.Label{
+									{
+										Title:    "Label 1",
+										HexColor: trelloColorMap["green"],
+									},
+									{
+										Title:    "Label 2",
+										HexColor: trelloColorMap["orange"],
+									},
 								},
-								{
-									Title:    "Label 2",
-									HexColor: trelloColorMap["orange"],
-								},
-							},
-							Attachments: []*models.TaskAttachment{
-								{
-									File: &files.File{
-										Name:        "Testimage.jpg",
-										Mime:        "image/jpg",
-										Size:        uint64(len(exampleFile)),
-										FileContent: exampleFile,
+								Attachments: []*models.TaskAttachment{
+									{
+										File: &files.File{
+											Name:        "Testimage.jpg",
+											Mime:        "image/jpg",
+											Size:        uint64(len(exampleFile)),
+											FileContent: exampleFile,
+										},
 									},
 								},
 							},
 						},
 						{
-							Title: "Test Card 2",
-							Description: `
+							Task: models.Task{
+								Title: "Test Card 2",
+								Description: `
 
 ## Checklist 1
 
@@ -248,84 +253,105 @@ func TestConvertTrelloToVikunja(t *testing.T) {
 
 * [ ] Pending Task
 * [ ] Another Pending Task`,
-							BucketID: 1,
-							Position: 124,
+								BucketID:       1,
+								KanbanPosition: 124,
+							},
 						},
 						{
-							Title:    "Test Card 3",
-							BucketID: 1,
-							Position: 126,
+							Task: models.Task{
+								Title:          "Test Card 3",
+								BucketID:       1,
+								KanbanPosition: 126,
+							},
 						},
 						{
-							Title:    "Test Card 4",
-							BucketID: 1,
-							Position: 127,
-							Labels: []*models.Label{
-								{
-									Title:    "Label 2",
-									HexColor: trelloColorMap["orange"],
+							Task: models.Task{
+								Title:          "Test Card 4",
+								BucketID:       1,
+								KanbanPosition: 127,
+								Labels: []*models.Label{
+									{
+										Title:    "Label 2",
+										HexColor: trelloColorMap["orange"],
+									},
 								},
 							},
 						},
 						{
-							Title:    "Test Card 5",
-							BucketID: 2,
-							Position: 111,
-							Labels: []*models.Label{
-								{
-									Title:    "Label 3",
-									HexColor: trelloColorMap["blue"],
+							Task: models.Task{
+								Title:          "Test Card 5",
+								BucketID:       2,
+								KanbanPosition: 111,
+								Labels: []*models.Label{
+									{
+										Title:    "Label 3",
+										HexColor: trelloColorMap["blue"],
+									},
 								},
 							},
 						},
 						{
-							Title:    "Test Card 6",
-							BucketID: 2,
-							Position: 222,
-							DueDate:  time1,
+							Task: models.Task{
+								Title:          "Test Card 6",
+								BucketID:       2,
+								KanbanPosition: 222,
+								DueDate:        time1,
+							},
 						},
 						{
-							Title:    "Test Card 7",
-							BucketID: 2,
-							Position: 333,
+							Task: models.Task{
+								Title:          "Test Card 7",
+								BucketID:       2,
+								KanbanPosition: 333,
+							},
 						},
 						{
-							Title:    "Test Card 8",
-							BucketID: 2,
-							Position: 444,
+							Task: models.Task{
+								Title:          "Test Card 8",
+								BucketID:       2,
+								KanbanPosition: 444,
+							},
 						},
 					},
 				},
 				{
-					Title: "TestBoard 2",
+					List: models.List{
+						Title: "TestBoard 2",
+					},
 					Buckets: []*models.Bucket{
 						{
 							ID:    3,
 							Title: "Test List 4",
 						},
 					},
-					Tasks: []*models.Task{
+					Tasks: []*models.TaskWithComments{
 						{
-							Title:    "Test Card 634",
-							BucketID: 3,
-							Position: 123,
+							Task: models.Task{
+								Title:          "Test Card 634",
+								BucketID:       3,
+								KanbanPosition: 123,
+							},
 						},
 					},
 				},
 				{
-					Title:      "TestBoard Archived",
-					IsArchived: true,
+					List: models.List{
+						Title:      "TestBoard Archived",
+						IsArchived: true,
+					},
 					Buckets: []*models.Bucket{
 						{
 							ID:    4,
 							Title: "Test List 5",
 						},
 					},
-					Tasks: []*models.Task{
+					Tasks: []*models.TaskWithComments{
 						{
-							Title:    "Test Card 63423",
-							BucketID: 4,
-							Position: 123,
+							Task: models.Task{
+								Title:          "Test Card 63423",
+								BucketID:       4,
+								KanbanPosition: 123,
+							},
 						},
 					},
 				},
@@ -333,7 +359,7 @@ func TestConvertTrelloToVikunja(t *testing.T) {
 		},
 	}
 
-	hierachie, err := convertTrelloDataToVikunja(trelloData)
+	hierachie, err := convertTrelloDataToVikunja(trelloData, "")
 	assert.NoError(t, err)
 	assert.NotNil(t, hierachie)
 	if diff, equal := messagediff.PrettyDiff(hierachie, expectedHierachie); !equal {

@@ -116,6 +116,25 @@ func (l *List) CanUpdate(s *xorm.Session, a web.Auth) (canUpdate bool, err error
 		return false, nil
 	}
 
+	// Get the list
+	ol, err := GetListSimpleByID(s, l.ID)
+	if err != nil {
+		return false, err
+	}
+
+	// Check if we're moving the list into a different namespace.
+	// If that is the case, we need to verify permissions to do so.
+	if l.NamespaceID != 0 && l.NamespaceID != ol.NamespaceID {
+		newNamespace := &Namespace{ID: l.NamespaceID}
+		can, err := newNamespace.CanWrite(s, a)
+		if err != nil {
+			return false, err
+		}
+		if !can {
+			return false, ErrGenericForbidden{}
+		}
+	}
+
 	fid := getSavedFilterIDFromListID(l.ID)
 	if fid > 0 {
 		sf, err := getSavedFilterSimpleByID(s, fid)
@@ -183,7 +202,7 @@ func (l *List) isOwner(u *user.User) bool {
 func (l *List) checkRight(s *xorm.Session, a web.Auth, rights ...Right) (bool, int, error) {
 
 	/*
-			The following loop creates an sql condition like this one:
+			The following loop creates a sql condition like this one:
 
 		    (ul.user_id = 1 AND ul.right = 1) OR (un.user_id = 1 AND un.right = 1) OR
 			(tm.user_id = 1 AND tn.right = 1) OR (tm2.user_id = 1 AND tl.right = 1) OR
@@ -223,16 +242,19 @@ func (l *List) checkRight(s *xorm.Session, a web.Auth, rights ...Right) (bool, i
 	conds = append(conds, builder.Eq{"n.owner_id": a.GetID()})
 
 	type allListRights struct {
-		UserNamespace NamespaceUser `xorm:"extends"`
-		UserList      ListUser      `xorm:"extends"`
+		UserNamespace *NamespaceUser `xorm:"extends"`
+		UserList      *ListUser      `xorm:"extends"`
 
-		TeamNamespace TeamNamespace `xorm:"extends"`
-		TeamList      TeamList      `xorm:"extends"`
+		TeamNamespace *TeamNamespace `xorm:"extends"`
+		TeamList      *TeamList      `xorm:"extends"`
+
+		NamespaceOwnerID int64 `xorm:"namespaces_owner_id"`
 	}
 
 	r := &allListRights{}
 	var maxRight = 0
 	exists, err := s.
+		Select("l.*, un.right, ul.right, tn.right, tl.right, n.owner_id as namespaces_owner_id").
 		Table("lists").
 		Alias("l").
 		// User stuff
@@ -265,6 +287,9 @@ func (l *List) checkRight(s *xorm.Session, a web.Auth, rights ...Right) (bool, i
 	}
 	if int(r.TeamList.Right) > maxRight {
 		maxRight = int(r.TeamList.Right)
+	}
+	if r.NamespaceOwnerID == a.GetID() {
+		maxRight = int(RightAdmin)
 	}
 
 	return exists, maxRight, err

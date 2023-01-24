@@ -29,10 +29,10 @@ func TestListUsersFromList(t *testing.T) {
 		ID:                           1,
 		Username:                     "user1",
 		Password:                     "$2a$14$dcadBoMBL9jQoOcZK8Fju.cy0Ptx2oZECkKLnaa8ekRoTFe1w7To.",
-		IsActive:                     true,
 		Issuer:                       "local",
 		EmailRemindersEnabled:        true,
 		OverdueTasksRemindersEnabled: true,
+		OverdueTasksRemindersTime:    "09:00",
 		Created:                      testCreatedTime,
 		Updated:                      testUpdatedTime,
 	}
@@ -43,6 +43,7 @@ func TestListUsersFromList(t *testing.T) {
 		Issuer:                       "local",
 		EmailRemindersEnabled:        true,
 		OverdueTasksRemindersEnabled: true,
+		OverdueTasksRemindersTime:    "09:00",
 		Created:                      testCreatedTime,
 		Updated:                      testUpdatedTime,
 	}
@@ -50,10 +51,10 @@ func TestListUsersFromList(t *testing.T) {
 		ID:                           3,
 		Username:                     "user3",
 		Password:                     "$2a$14$dcadBoMBL9jQoOcZK8Fju.cy0Ptx2oZECkKLnaa8ekRoTFe1w7To.",
-		PasswordResetToken:           "passwordresettesttoken",
 		Issuer:                       "local",
 		EmailRemindersEnabled:        true,
 		OverdueTasksRemindersEnabled: true,
+		OverdueTasksRemindersTime:    "09:00",
 		Created:                      testCreatedTime,
 		Updated:                      testUpdatedTime,
 	}
@@ -61,11 +62,11 @@ func TestListUsersFromList(t *testing.T) {
 		ID:                           4,
 		Username:                     "user4",
 		Password:                     "$2a$14$dcadBoMBL9jQoOcZK8Fju.cy0Ptx2oZECkKLnaa8ekRoTFe1w7To.",
-		IsActive:                     false,
-		EmailConfirmToken:            "tiepiQueed8ahc7zeeFe1eveiy4Ein8osooxegiephauph2Ael",
+		Status:                       user.StatusEmailConfirmationRequired,
 		Issuer:                       "local",
 		EmailRemindersEnabled:        true,
 		OverdueTasksRemindersEnabled: true,
+		OverdueTasksRemindersTime:    "09:00",
 		Created:                      testCreatedTime,
 		Updated:                      testUpdatedTime,
 	}
@@ -73,11 +74,11 @@ func TestListUsersFromList(t *testing.T) {
 		ID:                           5,
 		Username:                     "user5",
 		Password:                     "$2a$14$dcadBoMBL9jQoOcZK8Fju.cy0Ptx2oZECkKLnaa8ekRoTFe1w7To.",
-		IsActive:                     false,
-		EmailConfirmToken:            "tiepiQueed8ahc7zeeFe1eveiy4Ein8osooxegiephauph2Ael",
+		Status:                       user.StatusEmailConfirmationRequired,
 		Issuer:                       "local",
 		EmailRemindersEnabled:        true,
 		OverdueTasksRemindersEnabled: true,
+		OverdueTasksRemindersTime:    "09:00",
 		Created:                      testCreatedTime,
 		Updated:                      testUpdatedTime,
 	}
@@ -85,10 +86,10 @@ func TestListUsersFromList(t *testing.T) {
 		ID:                           6,
 		Username:                     "user6",
 		Password:                     "$2a$14$dcadBoMBL9jQoOcZK8Fju.cy0Ptx2oZECkKLnaa8ekRoTFe1w7To.",
-		IsActive:                     true,
 		Issuer:                       "local",
 		EmailRemindersEnabled:        true,
 		OverdueTasksRemindersEnabled: true,
+		OverdueTasksRemindersTime:    "09:00",
 		Created:                      testCreatedTime,
 		Updated:                      testUpdatedTime,
 	}
@@ -96,11 +97,11 @@ func TestListUsersFromList(t *testing.T) {
 		ID:                           7,
 		Username:                     "user7",
 		Password:                     "$2a$14$dcadBoMBL9jQoOcZK8Fju.cy0Ptx2oZECkKLnaa8ekRoTFe1w7To.",
-		IsActive:                     true,
 		Issuer:                       "local",
 		EmailRemindersEnabled:        true,
 		DiscoverableByEmail:          true,
 		OverdueTasksRemindersEnabled: true,
+		OverdueTasksRemindersTime:    "09:00",
 		Created:                      testCreatedTime,
 		Updated:                      testUpdatedTime,
 	}
@@ -108,10 +109,10 @@ func TestListUsersFromList(t *testing.T) {
 		ID:                           8,
 		Username:                     "user8",
 		Password:                     "$2a$14$dcadBoMBL9jQoOcZK8Fju.cy0Ptx2oZECkKLnaa8ekRoTFe1w7To.",
-		IsActive:                     true,
 		Issuer:                       "local",
 		EmailRemindersEnabled:        true,
 		OverdueTasksRemindersEnabled: true,
+		OverdueTasksRemindersTime:    "09:00",
 		Created:                      testCreatedTime,
 		Updated:                      testUpdatedTime,
 	}
@@ -119,10 +120,10 @@ func TestListUsersFromList(t *testing.T) {
 		ID:                           9,
 		Username:                     "user9",
 		Password:                     "$2a$14$dcadBoMBL9jQoOcZK8Fju.cy0Ptx2oZECkKLnaa8ekRoTFe1w7To.",
-		IsActive:                     true,
 		Issuer:                       "local",
 		EmailRemindersEnabled:        true,
 		OverdueTasksRemindersEnabled: true,
+		OverdueTasksRemindersTime:    "09:00",
 		Created:                      testCreatedTime,
 		Updated:                      testUpdatedTime,
 	}
@@ -130,10 +131,10 @@ func TestListUsersFromList(t *testing.T) {
 		ID:                           10,
 		Username:                     "user10",
 		Password:                     "$2a$14$dcadBoMBL9jQoOcZK8Fju.cy0Ptx2oZECkKLnaa8ekRoTFe1w7To.",
-		IsActive:                     true,
 		Issuer:                       "local",
 		EmailRemindersEnabled:        true,
 		OverdueTasksRemindersEnabled: true,
+		OverdueTasksRemindersTime:    "09:00",
 		Created:                      testCreatedTime,
 		Updated:                      testUpdatedTime,
 	}
@@ -142,10 +143,10 @@ func TestListUsersFromList(t *testing.T) {
 		Username:                     "user11",
 		Name:                         "Some one else",
 		Password:                     "$2a$14$dcadBoMBL9jQoOcZK8Fju.cy0Ptx2oZECkKLnaa8ekRoTFe1w7To.",
-		IsActive:                     true,
 		Issuer:                       "local",
 		EmailRemindersEnabled:        true,
 		OverdueTasksRemindersEnabled: true,
+		OverdueTasksRemindersTime:    "09:00",
 		Created:                      testCreatedTime,
 		Updated:                      testUpdatedTime,
 	}
@@ -154,11 +155,11 @@ func TestListUsersFromList(t *testing.T) {
 		Username:                     "user12",
 		Name:                         "Name with spaces",
 		Password:                     "$2a$14$dcadBoMBL9jQoOcZK8Fju.cy0Ptx2oZECkKLnaa8ekRoTFe1w7To.",
-		IsActive:                     true,
 		Issuer:                       "local",
 		EmailRemindersEnabled:        true,
 		DiscoverableByName:           true,
 		OverdueTasksRemindersEnabled: true,
+		OverdueTasksRemindersTime:    "09:00",
 		Created:                      testCreatedTime,
 		Updated:                      testUpdatedTime,
 	}
@@ -166,10 +167,10 @@ func TestListUsersFromList(t *testing.T) {
 		ID:                           13,
 		Username:                     "user13",
 		Password:                     "$2a$14$dcadBoMBL9jQoOcZK8Fju.cy0Ptx2oZECkKLnaa8ekRoTFe1w7To.",
-		IsActive:                     true,
 		Issuer:                       "local",
 		EmailRemindersEnabled:        true,
 		OverdueTasksRemindersEnabled: true,
+		OverdueTasksRemindersTime:    "09:00",
 		Created:                      testCreatedTime,
 		Updated:                      testUpdatedTime,
 	}
@@ -211,6 +212,13 @@ func TestListUsersFromList(t *testing.T) {
 				testuser11, // Shared Via NamespaceUser readonly
 				testuser12, // Shared Via NamespaceUser write
 				testuser13, // Shared Via NamespaceUser admin
+			},
+		},
+		{
+			name: "search for user1",
+			args: args{l: &List{ID: 19, OwnerID: 7}, search: "user1"},
+			wantUsers: []*user.User{
+				testuser1, // Shared Via Team readonly
 			},
 		},
 	}

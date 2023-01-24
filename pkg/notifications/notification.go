@@ -29,6 +29,15 @@ type Notification interface {
 	Name() string
 }
 
+type SubjectID interface {
+	SubjectID() int64
+}
+
+type NotificationWithSubject interface {
+	Notification
+	SubjectID
+}
+
 // Notifiable is an entity which can be notified. Usually a user.
 type Notifiable interface {
 	// Should return the email address this notifiable has.
@@ -39,6 +48,10 @@ type Notifiable interface {
 
 // Notify notifies a notifiable of a notification
 func Notify(notifiable Notifiable, notification Notification) (err error) {
+	if isUnderTest {
+		sentTestNotifications = append(sentTestNotifications, notification)
+		return nil
+	}
 
 	err = notifyMail(notifiable, notification)
 	if err != nil {
@@ -80,6 +93,10 @@ func notifyDB(notifiable Notifiable, notification Notification) (err error) {
 		NotifiableID: notifiable.RouteForDB(),
 		Notification: content,
 		Name:         notification.Name(),
+	}
+
+	if subject, is := notification.(SubjectID); is {
+		dbNotification.SubjectID = subject.SubjectID()
 	}
 
 	_, err = s.Insert(dbNotification)
