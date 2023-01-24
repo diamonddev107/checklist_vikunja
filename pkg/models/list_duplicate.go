@@ -61,12 +61,11 @@ func (ld *ListDuplicate) CanCreate(s *xorm.Session, a web.Auth) (canCreate bool,
 // @Security JWTKeyAuth
 // @Param listID path int true "The list ID to duplicate"
 // @Param list body models.ListDuplicate true "The target namespace which should hold the copied list."
-// @Success 201 {object} models.ListDuplicate "The created list."
+// @Success 200 {object} models.ListDuplicate "The created list."
 // @Failure 400 {object} web.HTTPError "Invalid list duplicate object provided."
 // @Failure 403 {object} web.HTTPError "The user does not have access to the list or namespace"
 // @Failure 500 {object} models.Message "Internal error"
 // @Router /lists/{listID}/duplicate [put]
-//
 //nolint:gocyclo
 func (ld *ListDuplicate) Create(s *xorm.Session, doer web.Auth) (err error) {
 
@@ -76,7 +75,7 @@ func (ld *ListDuplicate) Create(s *xorm.Session, doer web.Auth) (err error) {
 	ld.List.Identifier = "" // Reset the identifier to trigger regenerating a new one
 	// Set the owner to the current user
 	ld.List.OwnerID = doer.GetID()
-	if err := CreateList(s, ld.List, doer); err != nil {
+	if err := CreateOrUpdateList(s, ld.List, doer); err != nil {
 		// If there is no available unique list identifier, just reset it.
 		if IsErrListIdentifierIsNotUnique(err) {
 			ld.List.Identifier = ""
@@ -108,116 +107,17 @@ func (ld *ListDuplicate) Create(s *xorm.Session, doer web.Auth) (err error) {
 
 	log.Debugf("Duplicated all buckets from list %d into %d", ld.ListID, ld.List.ID)
 
-	err = duplicateTasks(s, doer, ld, bucketMap)
-	if err != nil {
-		return
-	}
-
-	// Background files + unsplash info
-	if ld.List.BackgroundFileID != 0 {
-
-		log.Debugf("Duplicating background %d from list %d into %d", ld.List.BackgroundFileID, ld.ListID, ld.List.ID)
-
-		f := &files.File{ID: ld.List.BackgroundFileID}
-		if err := f.LoadFileMetaByID(); err != nil {
-			return err
-		}
-		if err := f.LoadFileByID(); err != nil {
-			return err
-		}
-		defer f.File.Close()
-
-		file, err := files.Create(f.File, f.Name, f.Size, doer)
-		if err != nil {
-			return err
-		}
-
-		// Get unsplash info if applicable
-		up, err := GetUnsplashPhotoByFileID(s, ld.List.BackgroundFileID)
-		if err != nil && files.IsErrFileIsNotUnsplashFile(err) {
-			return err
-		}
-		if up != nil {
-			up.ID = 0
-			up.FileID = file.ID
-			if err := up.Save(s); err != nil {
-				return err
-			}
-		}
-
-		if err := SetListBackground(s, ld.List.ID, file, ld.List.BackgroundBlurHash); err != nil {
-			return err
-		}
-
-		log.Debugf("Duplicated list background from list %d into %d", ld.ListID, ld.List.ID)
-	}
-
-	// Rights / Shares
-	// To keep it simple(r) we will only copy rights which are directly used with the list, no namespace changes.
-	users := []*ListUser{}
-	err = s.Where("list_id = ?", ld.ListID).Find(&users)
-	if err != nil {
-		return
-	}
-	for _, u := range users {
-		u.ID = 0
-		u.ListID = ld.List.ID
-		if _, err := s.Insert(u); err != nil {
-			return err
-		}
-	}
-
-	log.Debugf("Duplicated user shares from list %d into %d", ld.ListID, ld.List.ID)
-
-	teams := []*TeamList{}
-	err = s.Where("list_id = ?", ld.ListID).Find(&teams)
-	if err != nil {
-		return
-	}
-	for _, t := range teams {
-		t.ID = 0
-		t.ListID = ld.List.ID
-		if _, err := s.Insert(t); err != nil {
-			return err
-		}
-	}
-
-	// Generate new link shares if any are available
-	linkShares := []*LinkSharing{}
-	err = s.Where("list_id = ?", ld.ListID).Find(&linkShares)
-	if err != nil {
-		return
-	}
-	for _, share := range linkShares {
-		share.ID = 0
-		share.ListID = ld.List.ID
-		share.Hash = utils.MakeRandomString(40)
-		if _, err := s.Insert(share); err != nil {
-			return err
-		}
-	}
-
-	log.Debugf("Duplicated all link shares from list %d into %d", ld.ListID, ld.List.ID)
-
-	return
-}
-
-func duplicateTasks(s *xorm.Session, doer web.Auth, ld *ListDuplicate, bucketMap map[int64]int64) (err error) {
 	// Get all tasks + all task details
 	tasks, _, _, err := getTasksForLists(s, []*List{{ID: ld.ListID}}, doer, &taskOptions{})
 	if err != nil {
 		return err
 	}
 
-	if len(tasks) == 0 {
-		return nil
-	}
-
 	// This map contains the old task id as key and the new duplicated task id as value.
 	// It is used to map old task items to new ones.
 	taskMap := make(map[int64]int64)
 	// Create + update all tasks (includes reminders)
-	oldTaskIDs := make([]int64, 0, len(tasks))
+	oldTaskIDs := make([]int64, len(tasks))
 	for _, t := range tasks {
 		oldID := t.ID
 		t.ID = 0
@@ -355,5 +255,91 @@ func duplicateTasks(s *xorm.Session, doer web.Auth, ld *ListDuplicate, bucketMap
 
 	log.Debugf("Duplicated all task relations from list %d into %d", ld.ListID, ld.List.ID)
 
-	return nil
+	// Background files + unsplash info
+	if ld.List.BackgroundFileID != 0 {
+
+		log.Debugf("Duplicating background %d from list %d into %d", ld.List.BackgroundFileID, ld.ListID, ld.List.ID)
+
+		f := &files.File{ID: ld.List.BackgroundFileID}
+		if err := f.LoadFileMetaByID(); err != nil {
+			return err
+		}
+		if err := f.LoadFileByID(); err != nil {
+			return err
+		}
+		defer f.File.Close()
+
+		file, err := files.Create(f.File, f.Name, f.Size, doer)
+		if err != nil {
+			return err
+		}
+
+		// Get unsplash info if applicable
+		up, err := GetUnsplashPhotoByFileID(s, ld.List.BackgroundFileID)
+		if err != nil && files.IsErrFileIsNotUnsplashFile(err) {
+			return err
+		}
+		if up != nil {
+			up.ID = 0
+			up.FileID = file.ID
+			if err := up.Save(s); err != nil {
+				return err
+			}
+		}
+
+		if err := SetListBackground(s, ld.List.ID, file); err != nil {
+			return err
+		}
+
+		log.Debugf("Duplicated list background from list %d into %d", ld.ListID, ld.List.ID)
+	}
+
+	// Rights / Shares
+	// To keep it simple(r) we will only copy rights which are directly used with the list, no namespace changes.
+	users := []*ListUser{}
+	err = s.Where("list_id = ?", ld.ListID).Find(&users)
+	if err != nil {
+		return
+	}
+	for _, u := range users {
+		u.ID = 0
+		u.ListID = ld.List.ID
+		if _, err := s.Insert(u); err != nil {
+			return err
+		}
+	}
+
+	log.Debugf("Duplicated user shares from list %d into %d", ld.ListID, ld.List.ID)
+
+	teams := []*TeamList{}
+	err = s.Where("list_id = ?", ld.ListID).Find(&teams)
+	if err != nil {
+		return
+	}
+	for _, t := range teams {
+		t.ID = 0
+		t.ListID = ld.List.ID
+		if _, err := s.Insert(t); err != nil {
+			return err
+		}
+	}
+
+	// Generate new link shares if any are available
+	linkShares := []*LinkSharing{}
+	err = s.Where("list_id = ?", ld.ListID).Find(&linkShares)
+	if err != nil {
+		return
+	}
+	for _, share := range linkShares {
+		share.ID = 0
+		share.ListID = ld.List.ID
+		share.Hash = utils.MakeRandomString(40)
+		if _, err := s.Insert(share); err != nil {
+			return err
+		}
+	}
+
+	log.Debugf("Duplicated all link shares from list %d into %d", ld.ListID, ld.List.ID)
+
+	return
 }

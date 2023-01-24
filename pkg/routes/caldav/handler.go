@@ -19,12 +19,11 @@ package caldav
 import (
 	"bytes"
 	"fmt"
-	"io"
+	"io/ioutil"
 	"reflect"
 	"strconv"
 	"strings"
 
-	caldav2 "code.vikunja.io/api/pkg/caldav"
 	"code.vikunja.io/api/pkg/log"
 	"code.vikunja.io/api/pkg/models"
 	"code.vikunja.io/api/pkg/user"
@@ -56,18 +55,18 @@ func ListHandler(c echo.Context) error {
 	}
 
 	storage := &VikunjaCaldavListStorage{
-		list: &models.ListWithTasksAndBuckets{List: models.List{ID: listID}},
+		list: &models.List{ID: listID},
 		user: u,
 	}
 
 	// Try to parse a task from the request payload
-	body, _ := io.ReadAll(c.Request().Body)
+	body, _ := ioutil.ReadAll(c.Request().Body)
 	// Restore the io.ReadCloser to its original state
-	c.Request().Body = io.NopCloser(bytes.NewBuffer(body))
+	c.Request().Body = ioutil.NopCloser(bytes.NewBuffer(body))
 	// Parse it
 	vtodo := string(body)
 	if vtodo != "" && strings.HasPrefix(vtodo, `BEGIN:VCALENDAR`) {
-		storage.task, err = caldav2.ParseTaskFromVTODO(vtodo)
+		storage.task, err = parseTaskFromVTODO(vtodo)
 		if err != nil {
 			log.Error(err)
 			return echo.ErrInternalServerError
@@ -102,7 +101,7 @@ func TaskHandler(c echo.Context) error {
 	taskUID := strings.TrimSuffix(c.Param("task"), ".ics")
 
 	storage := &VikunjaCaldavListStorage{
-		list: &models.ListWithTasksAndBuckets{List: models.List{ID: listID}},
+		list: &models.List{ID: listID},
 		task: &models.Task{UID: taskUID},
 		user: u,
 	}
@@ -127,9 +126,9 @@ func PrincipalHandler(c echo.Context) error {
 	}
 
 	// Try to parse a task from the request payload
-	body, _ := io.ReadAll(c.Request().Body)
+	body, _ := ioutil.ReadAll(c.Request().Body)
 	// Restore the io.ReadCloser to its original state
-	c.Request().Body = io.NopCloser(bytes.NewBuffer(body))
+	c.Request().Body = ioutil.NopCloser(bytes.NewBuffer(body))
 
 	log.Debugf("[CALDAV] Request Body: %v\n", string(body))
 	log.Debugf("[CALDAV] Request Headers: %v\n", c.Request().Header)
@@ -157,9 +156,9 @@ func EntryHandler(c echo.Context) error {
 	}
 
 	// Try to parse a task from the request payload
-	body, _ := io.ReadAll(c.Request().Body)
+	body, _ := ioutil.ReadAll(c.Request().Body)
 	// Restore the io.ReadCloser to its original state
-	c.Request().Body = io.NopCloser(bytes.NewBuffer(body))
+	c.Request().Body = ioutil.NopCloser(bytes.NewBuffer(body))
 
 	log.Debugf("[CALDAV] Request Body: %v\n", string(body))
 	log.Debugf("[CALDAV] Request Headers: %v\n", c.Request().Header)

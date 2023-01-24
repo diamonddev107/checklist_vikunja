@@ -19,12 +19,10 @@ package models
 import (
 	"time"
 
-	"code.vikunja.io/api/pkg/db"
-
 	"code.vikunja.io/api/pkg/events"
+
 	user2 "code.vikunja.io/api/pkg/user"
 	"code.vikunja.io/web"
-
 	"xorm.io/xorm"
 )
 
@@ -63,7 +61,7 @@ func (NamespaceUser) TableName() string {
 // @Security JWTKeyAuth
 // @Param id path int true "Namespace ID"
 // @Param namespace body models.NamespaceUser true "The user you want to add to the namespace."
-// @Success 201 {object} models.NamespaceUser "The created user<->namespace relation."
+// @Success 200 {object} models.NamespaceUser "The created user<->namespace relation."
 // @Failure 400 {object} web.HTTPError "Invalid user namespace object provided."
 // @Failure 404 {object} web.HTTPError "The user does not exist."
 // @Failure 403 {object} web.HTTPError "The user does not have access to the namespace"
@@ -187,11 +185,13 @@ func (nu *NamespaceUser) ReadAll(s *xorm.Session, a web.Auth, search string, pag
 
 	// Get all users
 	all := []*UserWithRight{}
+
 	limit, start := getLimitFromPageIndex(page, perPage)
+
 	query := s.
 		Join("INNER", "users_namespaces", "user_id = users.id").
 		Where("users_namespaces.namespace_id = ?", nu.NamespaceID).
-		Where(db.ILIKE("users.username", search))
+		Where("users.username LIKE ?", "%"+search+"%")
 	if limit > 0 {
 		query = query.Limit(limit, start)
 	}

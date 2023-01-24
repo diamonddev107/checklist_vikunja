@@ -2,7 +2,7 @@ baseurl: https://vikunja.io/docs/
 title: Vikunja
 theme: vikunja
 enableRobotsTXT: true
-canonifyURLs: false
+canonifyURLs: true
 
 pygmentsUseClasses: true
 
@@ -31,10 +31,10 @@ menu:
       url: https://vikunja.io/en/
       weight: 10
     - name: Features
-      url: https://vikunja.io/features
+      url: https://vikunja.io/en/features
       weight: 20
     - name: Download
-      url: https://vikunja.io/download
+      url: https://vikunja.io/en/download
       weight: 30
     - name: Docs
       url: https://vikunja.io/docs
@@ -45,6 +45,3 @@ menu:
     - name: Community
       url: https://community.vikunja.io/
       weight: 60
-    - name: Get it Hosted
-      url: https://vikunja.cloud/?utm_source=io&utm_medium=io&utm_campaign=menu
-      weight: 70

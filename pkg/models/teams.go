@@ -19,14 +19,13 @@ package models
 import (
 	"time"
 
-	"code.vikunja.io/api/pkg/db"
-
 	"code.vikunja.io/api/pkg/events"
+
+	"xorm.io/xorm"
+
 	"code.vikunja.io/api/pkg/user"
 	"code.vikunja.io/web"
-
 	"xorm.io/builder"
-	"xorm.io/xorm"
 )
 
 // Team holds a team object
@@ -79,7 +78,7 @@ type TeamMember struct {
 }
 
 // TableName makes beautiful table names
-func (*TeamMember) TableName() string {
+func (TeamMember) TableName() string {
 	return "team_members"
 }
 
@@ -211,12 +210,13 @@ func (t *Team) ReadAll(s *xorm.Session, a web.Auth, search string, page int, per
 	}
 
 	limit, start := getLimitFromPageIndex(page, perPage)
+
 	all := []*Team{}
 	query := s.Select("teams.*").
 		Table("teams").
 		Join("INNER", "team_members", "team_members.team_id = teams.id").
 		Where("team_members.user_id = ?", a.GetID()).
-		Where(db.ILIKE("teams.name", search))
+		Where("teams.name LIKE ?", "%"+search+"%")
 	if limit > 0 {
 		query = query.Limit(limit, start)
 	}
@@ -247,7 +247,7 @@ func (t *Team) ReadAll(s *xorm.Session, a web.Auth, search string, page int, per
 // @Produce json
 // @Security JWTKeyAuth
 // @Param team body models.Team true "The team you want to create."
-// @Success 201 {object} models.Team "The created team."
+// @Success 200 {object} models.Team "The created team."
 // @Failure 400 {object} web.HTTPError "Invalid team object provided."
 // @Failure 500 {object} models.Message "Internal error"
 // @Router /teams [put]

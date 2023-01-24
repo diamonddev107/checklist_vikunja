@@ -7,13 +7,12 @@ definitions:
     type: object
   background.Image:
     properties:
-      blur_hash:
-        type: string
       id:
         type: string
       info:
         description: This can be used to supply extra information from an image provider
           to clients
+        type: object
       thumb:
         type: string
       url:
@@ -58,9 +57,30 @@ definitions:
           value.
         type: string
       created_by:
-        allOf:
-        - $ref: '#/definitions/user.User'
+        $ref: '#/definitions/user.User'
         description: The user who initially created the bucket.
+      filter_by:
+        description: The field name of the field to filter by
+        items:
+          type: string
+        type: array
+      filter_comparator:
+        description: The comparator for field and value
+        items:
+          type: string
+        type: array
+      filter_concat:
+        description: The way all filter conditions are concatenated together, can
+          be either "and" or "or".,
+        type: string
+      filter_include_nulls:
+        description: If set to true, the result will also include null values
+        type: boolean
+      filter_value:
+        description: The value of the field name to filter by
+        items:
+          type: string
+        type: array
       id:
         description: The unique, numeric id of this bucket.
         type: integer
@@ -76,10 +96,18 @@ definitions:
       list_id:
         description: The list this bucket belongs to.
         type: integer
-      position:
-        description: The position this bucket has when querying all buckets. See the
-          tasks.position property on how to use this.
-        type: number
+      order_by:
+        description: The query parameter to order the items by. This can be either
+          asc or desc, with asc being the default.
+        items:
+          type: string
+        type: array
+      sort_by:
+        description: The query parameter to sort by. This is for ex. done, priority,
+          etc.
+        items:
+          type: string
+        type: array
       tasks:
         description: All tasks which belong to this bucket.
         items:
@@ -117,17 +145,12 @@ definitions:
       bucket_id:
         description: BucketID is the ID of the kanban bucket this task belongs to.
         type: integer
-      cover_image_attachment_id:
-        description: If this task has a cover image, the field will return the id
-          of the attachment that is the cover image.
-        type: integer
       created:
         description: A timestamp when this task was created. You cannot change this
           value.
         type: string
       created_by:
-        allOf:
-        - $ref: '#/definitions/user.User'
+        $ref: '#/definitions/user.User'
         description: The user who initially created the task.
       description:
         description: The task description.
@@ -160,13 +183,8 @@ definitions:
         type: integer
       is_favorite:
         description: True if a task is a favorite task. Favorite tasks show up in
-          a separate "Important" list. This value depends on the user making the call
-          to the api.
+          a separate "Important" list
         type: boolean
-      kanban_position:
-        description: The position of tasks in the kanban board. See the docs for the
-          `position` property on how to use this.
-        type: number
       labels:
         description: An array of labels which are associated with this task.
         items:
@@ -192,8 +210,7 @@ definitions:
           sort by this later.
         type: integer
       related_tasks:
-        allOf:
-        - $ref: '#/definitions/models.RelatedTaskMap'
+        $ref: '#/definitions/models.RelatedTaskMap'
         description: All related tasks, grouped by their relation kind
       reminder_dates:
         description: An array of datetimes when the user wants to be reminded of the
@@ -207,18 +224,16 @@ definitions:
           increase all remindes and the due date by its amount.
         type: integer
       repeat_mode:
-        allOf:
-        - $ref: '#/definitions/models.TaskRepeatMode'
         description: 'Can have three possible values which will trigger when the task
           is marked as done: 0 = repeats after the amount specified in repeat_after,
           1 = repeats all dates each months (ignoring repeat_after), 3 = repeats from
           the current date rather than the last set date.'
+        type: integer
       start_date:
         description: When this task starts.
         type: string
       subscription:
-        allOf:
-        - $ref: '#/definitions/models.Subscription'
+        $ref: '#/definitions/models.Subscription'
         description: |-
           The subscription status for the user reading this task. You can only read this property, use the subscription endpoints to modify it.
           Will only returned when retreiving one task.
@@ -229,6 +244,7 @@ definitions:
         type: array
       title:
         description: The task text. This is what you'll see in the list.
+        maxLength: 250
         minLength: 1
         type: string
       updated:
@@ -250,6 +266,7 @@ definitions:
         type: string
       notification:
         description: The actual content of the notification.
+        type: object
       read:
         description: |-
           Whether or not to mark this notification as read or unread.
@@ -267,8 +284,7 @@ definitions:
           value.
         type: string
       created_by:
-        allOf:
-        - $ref: '#/definitions/user.User'
+        $ref: '#/definitions/user.User'
         description: The user who created this label
       description:
         description: The label description.
@@ -330,23 +346,20 @@ definitions:
           it after the link share has been created.
         type: string
       right:
-        allOf:
-        - $ref: '#/definitions/models.Right'
         default: 0
         description: The right this list is shared with. 0 = Read only, 1 = Read &
           Write, 2 = Admin. See the docs for more details.
         maximum: 2
+        type: integer
       shared_by:
-        allOf:
-        - $ref: '#/definitions/user.User'
+        $ref: '#/definitions/user.User'
         description: The user who shared this list
       sharing_type:
-        allOf:
-        - $ref: '#/definitions/models.SharingType'
         default: 0
         description: The kind of this link. 0 = undefined, 1 = without password, 2
           = with password.
         maximum: 2
+        type: integer
       updated:
         description: A timestamp when this share was last updated. You cannot change
           this value.
@@ -354,15 +367,11 @@ definitions:
     type: object
   models.List:
     properties:
-      background_blur_hash:
-        description: Contains a very small version of the list background to use as
-          a blurry preview until the actual background is loaded. Check out https://blurha.sh/
-          to learn how it works.
-        type: string
       background_information:
         description: Holds extra information about the background set since some background
           providers require attribution or similar. If not null, the background can
           be accessed at /lists/{listID}/background
+        type: object
       created:
         description: A timestamp when this list was created. You cannot change this
           value.
@@ -387,21 +396,15 @@ definitions:
         type: boolean
       is_favorite:
         description: True if a list is a favorite. Favorite lists show up in a separate
-          namespace. This value depends on the user making the call to the api.
+          namespace.
         type: boolean
       namespace_id:
         type: integer
       owner:
-        allOf:
-        - $ref: '#/definitions/user.User'
+        $ref: '#/definitions/user.User'
         description: The user who created this list.
-      position:
-        description: The position this list has when querying all lists. See the tasks.position
-          property on how to use this.
-        type: number
       subscription:
-        allOf:
-        - $ref: '#/definitions/models.Subscription'
+        $ref: '#/definitions/models.Subscription'
         description: |-
           The subscription status for the user reading this list. You can only read this property, use the subscription endpoints to modify it.
           Will only returned when retreiving one list.
@@ -418,8 +421,7 @@ definitions:
   models.ListDuplicate:
     properties:
       list:
-        allOf:
-        - $ref: '#/definitions/models.List'
+        $ref: '#/definitions/models.List'
         description: The copied list
       namespace_id:
         description: The target namespace ID
@@ -435,12 +437,11 @@ definitions:
         description: The unique, numeric id of this list <-> user relation.
         type: integer
       right:
-        allOf:
-        - $ref: '#/definitions/models.Right'
         default: 0
         description: The right this user has. 0 = Read only, 1 = Read & Write, 2 =
           Admin. See the docs for more details.
         maximum: 2
+        type: integer
       updated:
         description: A timestamp when this relation was last updated. You cannot change
           this value.
@@ -475,12 +476,10 @@ definitions:
         description: Whether or not a namespace is archived.
         type: boolean
       owner:
-        allOf:
-        - $ref: '#/definitions/user.User'
+        $ref: '#/definitions/user.User'
         description: The user who owns this namespace
       subscription:
-        allOf:
-        - $ref: '#/definitions/models.Subscription'
+        $ref: '#/definitions/models.Subscription'
         description: |-
           The subscription status for the user reading this namespace. You can only read this property, use the subscription endpoints to modify it.
           Will only returned when retreiving one namespace.
@@ -504,12 +503,11 @@ definitions:
         description: The unique, numeric id of this namespace <-> user relation.
         type: integer
       right:
-        allOf:
-        - $ref: '#/definitions/models.Right'
         default: 0
         description: The right this user has. 0 = Read only, 1 = Read & Write, 2 =
           Admin. See the docs for more details.
         maximum: 2
+        type: integer
       updated:
         description: A timestamp when this relation was last updated. You cannot change
           this value.
@@ -542,12 +540,10 @@ definitions:
           $ref: '#/definitions/models.List'
         type: array
       owner:
-        allOf:
-        - $ref: '#/definitions/user.User'
+        $ref: '#/definitions/user.User'
         description: The user who owns this namespace
       subscription:
-        allOf:
-        - $ref: '#/definitions/models.Subscription'
+        $ref: '#/definitions/models.Subscription'
         description: |-
           The subscription status for the user reading this namespace. You can only read this property, use the subscription endpoints to modify it.
           Will only returned when retreiving one namespace.
@@ -567,44 +563,6 @@ definitions:
         $ref: '#/definitions/models.Task'
       type: array
     type: object
-  models.RelationKind:
-    enum:
-    - unknown
-    - subtask
-    - parenttask
-    - related
-    - duplicateof
-    - duplicates
-    - blocking
-    - blocked
-    - precedes
-    - follows
-    - copiedfrom
-    - copiedto
-    type: string
-    x-enum-varnames:
-    - RelationKindUnknown
-    - RelationKindSubtask
-    - RelationKindParenttask
-    - RelationKindRelated
-    - RelationKindDuplicateOf
-    - RelationKindDuplicates
-    - RelationKindBlocking
-    - RelationKindBlocked
-    - RelationKindPreceeds
-    - RelationKindFollows
-    - RelationKindCopiedFrom
-    - RelationKindCopiedTo
-  models.Right:
-    enum:
-    - 0
-    - 1
-    - 2
-    type: integer
-    x-enum-varnames:
-    - RightRead
-    - RightWrite
-    - RightAdmin
   models.SavedFilter:
     properties:
       created:
@@ -615,8 +573,7 @@ definitions:
         description: The description of the filter
         type: string
       filters:
-        allOf:
-        - $ref: '#/definitions/models.TaskCollection'
+        $ref: '#/definitions/models.TaskCollection'
         description: The actual filters this filter contains
       id:
         description: The unique numeric id of this saved filter
@@ -626,8 +583,7 @@ definitions:
           a separate namespace together with favorite lists.
         type: boolean
       owner:
-        allOf:
-        - $ref: '#/definitions/user.User'
+        $ref: '#/definitions/user.User'
         description: The user who owns this filter
       title:
         description: The title of the filter.
@@ -639,16 +595,6 @@ definitions:
           this value.
         type: string
     type: object
-  models.SharingType:
-    enum:
-    - 0
-    - 1
-    - 2
-    type: integer
-    x-enum-varnames:
-    - SharingTypeUnknown
-    - SharingTypeWithoutPassword
-    - SharingTypeWithPassword
   models.Subscription:
     properties:
       created:
@@ -664,8 +610,7 @@ definitions:
         description: The numeric ID of the subscription
         type: integer
       user:
-        allOf:
-        - $ref: '#/definitions/user.User'
+        $ref: '#/definitions/user.User'
         description: The user who made this subscription
     type: object
   models.Task:
@@ -683,17 +628,12 @@ definitions:
       bucket_id:
         description: BucketID is the ID of the kanban bucket this task belongs to.
         type: integer
-      cover_image_attachment_id:
-        description: If this task has a cover image, the field will return the id
-          of the attachment that is the cover image.
-        type: integer
       created:
         description: A timestamp when this task was created. You cannot change this
           value.
         type: string
       created_by:
-        allOf:
-        - $ref: '#/definitions/user.User'
+        $ref: '#/definitions/user.User'
         description: The user who initially created the task.
       description:
         description: The task description.
@@ -726,13 +666,8 @@ definitions:
         type: integer
       is_favorite:
         description: True if a task is a favorite task. Favorite tasks show up in
-          a separate "Important" list. This value depends on the user making the call
-          to the api.
+          a separate "Important" list
         type: boolean
-      kanban_position:
-        description: The position of tasks in the kanban board. See the docs for the
-          `position` property on how to use this.
-        type: number
       labels:
         description: An array of labels which are associated with this task.
         items:
@@ -758,8 +693,7 @@ definitions:
           sort by this later.
         type: integer
       related_tasks:
-        allOf:
-        - $ref: '#/definitions/models.RelatedTaskMap'
+        $ref: '#/definitions/models.RelatedTaskMap'
         description: All related tasks, grouped by their relation kind
       reminder_dates:
         description: An array of datetimes when the user wants to be reminded of the
@@ -773,23 +707,22 @@ definitions:
           increase all remindes and the due date by its amount.
         type: integer
       repeat_mode:
-        allOf:
-        - $ref: '#/definitions/models.TaskRepeatMode'
         description: 'Can have three possible values which will trigger when the task
           is marked as done: 0 = repeats after the amount specified in repeat_after,
           1 = repeats all dates each months (ignoring repeat_after), 3 = repeats from
           the current date rather than the last set date.'
+        type: integer
       start_date:
         description: When this task starts.
         type: string
       subscription:
-        allOf:
-        - $ref: '#/definitions/models.Subscription'
+        $ref: '#/definitions/models.Subscription'
         description: |-
           The subscription status for the user reading this task. You can only read this property, use the subscription endpoints to modify it.
           Will only returned when retreiving one task.
       title:
         description: The task text. This is what you'll see in the list.
+        maxLength: 250
         minLength: 1
         type: string
       updated:
@@ -874,30 +807,18 @@ definitions:
           value.
         type: string
       created_by:
-        allOf:
-        - $ref: '#/definitions/user.User'
+        $ref: '#/definitions/user.User'
         description: The user who created this relation
       other_task_id:
         description: The ID of the other task, the task which is being related.
         type: integer
       relation_kind:
-        allOf:
-        - $ref: '#/definitions/models.RelationKind'
         description: The kind of the relation.
+        type: string
       task_id:
         description: The ID of the "base" task, the task which has a relation to another.
         type: integer
     type: object
-  models.TaskRepeatMode:
-    enum:
-    - 0
-    - 1
-    - 2
-    type: integer
-    x-enum-varnames:
-    - TaskRepeatModeDefault
-    - TaskRepeatModeMonth
-    - TaskRepeatModeFromCurrentDate
   models.Team:
     properties:
       created:
@@ -905,8 +826,7 @@ definitions:
           this value.
         type: string
       created_by:
-        allOf:
-        - $ref: '#/definitions/user.User'
+        $ref: '#/definitions/user.User'
         description: The user who created this team.
       description:
         description: The team's description.
@@ -939,12 +859,11 @@ definitions:
         description: The unique, numeric id of this list <-> team relation.
         type: integer
       right:
-        allOf:
-        - $ref: '#/definitions/models.Right'
         default: 0
         description: The right this team has. 0 = Read only, 1 = Read & Write, 2 =
           Admin. See the docs for more details.
         maximum: 2
+        type: integer
       team_id:
         description: The team id.
         type: integer
@@ -981,12 +900,11 @@ definitions:
         description: The unique, numeric id of this namespace <-> team relation.
         type: integer
       right:
-        allOf:
-        - $ref: '#/definitions/models.Right'
         default: 0
         description: The right this team has. 0 = Read only, 1 = Read & Write, 2 =
           Admin. See the docs for more details.
         maximum: 2
+        type: integer
       team_id:
         description: The team id.
         type: integer
@@ -1032,8 +950,7 @@ definitions:
           this value.
         type: string
       created_by:
-        allOf:
-        - $ref: '#/definitions/user.User'
+        $ref: '#/definitions/user.User'
         description: The user who created this team.
       description:
         description: The team's description.
@@ -1052,7 +969,7 @@ definitions:
         minLength: 1
         type: string
       right:
-        $ref: '#/definitions/models.Right'
+        type: integer
       updated:
         description: A timestamp when this relation was last updated. You cannot change
           this value.
@@ -1075,7 +992,7 @@ definitions:
         description: The full name of the user.
         type: string
       right:
-        $ref: '#/definitions/models.Right'
+        type: integer
       updated:
         description: A timestamp when this task was last updated. You cannot change
           this value.
@@ -1100,6 +1017,7 @@ definitions:
         type: string
       notification:
         description: The actual content of the notification.
+        type: object
       read_at:
         description: When this notification is marked as read, this will be updated
           with the current timestamp.
@@ -1119,8 +1037,6 @@ definitions:
       client_id:
         type: string
       key:
-        type: string
-      logout_url:
         type: string
       name:
         type: string
@@ -1173,10 +1089,6 @@ definitions:
     type: object
   user.Login:
     properties:
-      long_token:
-        description: If true, the token returned will be valid a lot longer than default.
-          Useful for "remember me" style logins.
-        type: boolean
       password:
         description: The password for the user.
         type: string
@@ -1219,15 +1131,6 @@ definitions:
       passcode:
         type: string
     type: object
-  user.Token:
-    properties:
-      created:
-        type: string
-      id:
-        type: integer
-      token:
-        type: string
-    type: object
   user.User:
     properties:
       created:
@@ -1263,13 +1166,7 @@ definitions:
     properties:
       avatar_provider:
         description: The avatar provider. Valid types are `gravatar` (uses the user
-          email), `upload`, `initials`, `marble` (generates a random avatar for each
-          user), `default`.
-        type: string
-    type: object
-  v1.UserDeletionRequestConfirm:
-    properties:
-      token:
+          email), `upload`, `initials`, `default`.
         type: string
     type: object
   v1.UserPassword:
@@ -1279,18 +1176,8 @@ definitions:
       old_password:
         type: string
     type: object
-  v1.UserPasswordConfirmation:
-    properties:
-      password:
-        type: string
-    type: object
   v1.UserSettings:
     properties:
-      default_list_id:
-        description: |-
-          If a task is created without a specified list this value should be used. Applies
-          to tasks made directly in API and from clients.
-        type: integer
       discoverable_by_email:
         description: If true, the user can be found when searching for their exact
           email.
@@ -1302,9 +1189,6 @@ definitions:
       email_reminders_enabled:
         description: If enabled, sends email reminders of tasks to the user.
         type: boolean
-      language:
-        description: The user's language
-        type: string
       name:
         description: The new name of the current user.
         type: string
@@ -1312,18 +1196,6 @@ definitions:
         description: If enabled, the user will get an email for their overdue tasks
           each morning.
         type: boolean
-      overdue_tasks_reminders_time:
-        description: The time when the daily summary of overdue tasks will be sent
-          via email.
-        type: string
-      timezone:
-        description: The user's time zone. Used to send task reminders in the time
-          zone of the user.
-        type: string
-      week_start:
-        description: The day when the week starts for this user. 0 = sunday, 1 = monday,
-          etc.
-        type: integer
     type: object
   v1.authInfo:
     properties:
@@ -1385,11 +1257,7 @@ definitions:
         type: boolean
       task_attachments_enabled:
         type: boolean
-      task_comments_enabled:
-        type: boolean
       totp_enabled:
-        type: boolean
-      user_deletion_enabled:
         type: boolean
       version:
         type: string
@@ -1399,6 +1267,12 @@ definitions:
       code:
         type: integer
       message:
+        type: string
+    type: object
+  wunderlist.Migration:
+    properties:
+      code:
+        description: Code is the code used to get a user api token
         type: string
     type: object
 info:
@@ -1433,8 +1307,7 @@ paths:
         name: username
         required: true
         type: string
-      - description: The size of the avatar you want to get. If bigger than the max
-          configured size this will be adjusted to the maximum size.
+      - description: The size of the avatar you want to get
         in: query
         name: size
         type: integer
@@ -1497,7 +1370,7 @@ paths:
       parameters:
       - description: Unsplash Image ID
         in: path
-        name: image
+        name: thumb
         required: true
         type: integer
       produces:
@@ -1527,7 +1400,7 @@ paths:
       parameters:
       - description: Unsplash Image ID
         in: path
-        name: image
+        name: thumb
         required: true
         type: integer
       produces:
@@ -1589,7 +1462,7 @@ paths:
       produces:
       - application/json
       responses:
-        "201":
+        "200":
           description: The Saved Filter
           schema:
             $ref: '#/definitions/models.SavedFilter'
@@ -1772,7 +1645,7 @@ paths:
       produces:
       - application/json
       responses:
-        "201":
+        "200":
           description: The created label object.
           schema:
             $ref: '#/definitions/models.Label'
@@ -2072,7 +1945,7 @@ paths:
       produces:
       - application/json
       responses:
-        "201":
+        "200":
           description: The created task object.
           schema:
             $ref: '#/definitions/models.Task'
@@ -2465,7 +2338,7 @@ paths:
       produces:
       - application/json
       responses:
-        "201":
+        "200":
           description: The created team<->list relation.
           schema:
             $ref: '#/definitions/models.TeamList'
@@ -2556,7 +2429,7 @@ paths:
       produces:
       - application/json
       responses:
-        "201":
+        "200":
           description: The created user<->list relation.
           schema:
             $ref: '#/definitions/models.ListUser'
@@ -2644,7 +2517,7 @@ paths:
       produces:
       - application/json
       responses:
-        "201":
+        "200":
           description: The created link share object.
           schema:
             $ref: '#/definitions/models.LinkSharing'
@@ -2854,7 +2727,7 @@ paths:
       produces:
       - application/json
       responses:
-        "201":
+        "200":
           description: The created list.
           schema:
             $ref: '#/definitions/models.ListDuplicate'
@@ -2921,10 +2794,7 @@ paths:
         in: query
         name: filter_by
         type: string
-      - description: The value to filter for. You can use [grafana](https://grafana.com/docs/grafana/latest/dashboards/time-range-controls)-
-          or [elasticsearch](https://www.elastic.co/guide/en/elasticsearch/reference/7.3/common-options.html#date-math)-style
-          relative dates for all date fields like `due_date`, `start_date`, `end_date`,
-          etc.
+      - description: The value to filter for.
         in: query
         name: filter_value
         type: string
@@ -3238,55 +3108,6 @@ paths:
       summary: Get migration status
       tags:
       - migration
-  /migration/ticktick/migrate:
-    post:
-      consumes:
-      - application/json
-      description: Imports all projects, tasks, notes, reminders, subtasks and files
-        from a TickTick backup export into Vikunja.
-      parameters:
-      - description: The TickTick backup csv file.
-        in: formData
-        name: import
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: A message telling you everything was migrated successfully.
-          schema:
-            $ref: '#/definitions/models.Message'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/models.Message'
-      security:
-      - JWTKeyAuth: []
-      summary: Import all lists, tasks etc. from a TickTick backup export
-      tags:
-      - migration
-  /migration/ticktick/status:
-    get:
-      description: Returns if the current user already did the migation or not. This
-        is useful to show a confirmation message in the frontend if the user is trying
-        to do the same migration again.
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: The migration status
-          schema:
-            $ref: '#/definitions/migration.Status'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/models.Message'
-      security:
-      - JWTKeyAuth: []
-      summary: Get migration status
-      tags:
-      - migration
   /migration/todoist/auth:
     get:
       description: Returns the auth url where the user needs to get its auth code.
@@ -3429,18 +3250,40 @@ paths:
       summary: Get migration status
       tags:
       - migration
-  /migration/vikunja-file/migrate:
+  /migration/wunderlist/auth:
+    get:
+      description: Returns the auth url where the user needs to get its auth code.
+        This code can then be used to migrate everything from wunderlist to Vikunja.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: The auth url.
+          schema:
+            $ref: '#/definitions/handler.AuthURL'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.Message'
+      security:
+      - JWTKeyAuth: []
+      summary: Get the auth url from wunderlist
+      tags:
+      - migration
+  /migration/wunderlist/migrate:
     post:
       consumes:
       - application/json
-      description: Imports all projects, tasks, notes, reminders, subtasks and files
-        from a Vikunjda data export into Vikunja.
+      description: Migrates all folders, lists, tasks, notes, reminders, subtasks
+        and files from wunderlist to vikunja.
       parameters:
-      - description: The Vikunja export zip file.
-        in: formData
-        name: import
+      - description: The auth code previously obtained from the auth url. See the
+          docs for /migration/wunderlist/auth.
+        in: body
+        name: migrationCode
         required: true
-        type: string
+        schema:
+          $ref: '#/definitions/wunderlist.Migration'
       produces:
       - application/json
       responses:
@@ -3454,10 +3297,10 @@ paths:
             $ref: '#/definitions/models.Message'
       security:
       - JWTKeyAuth: []
-      summary: Import all lists, tasks etc. from a Vikunja data export
+      summary: Migrate all lists, tasks etc. from wunderlist
       tags:
       - migration
-  /migration/vikunja-file/status:
+  /migration/wunderlist/status:
     get:
       description: Returns if the current user already did the migation or not. This
         is useful to show a confirmation message in the frontend if the user is trying
@@ -3579,7 +3422,7 @@ paths:
       produces:
       - application/json
       responses:
-        "201":
+        "200":
           description: The created namespace.
           schema:
             $ref: '#/definitions/models.Namespace'
@@ -3767,7 +3610,7 @@ paths:
       produces:
       - application/json
       responses:
-        "201":
+        "200":
           description: The created team<->namespace relation.
           schema:
             $ref: '#/definitions/models.TeamNamespace'
@@ -3859,7 +3702,7 @@ paths:
       produces:
       - application/json
       responses:
-        "201":
+        "200":
           description: The created user<->namespace relation.
           schema:
             $ref: '#/definitions/models.NamespaceUser'
@@ -3905,7 +3748,7 @@ paths:
       produces:
       - application/json
       responses:
-        "201":
+        "200":
           description: The created list.
           schema:
             $ref: '#/definitions/models.List'
@@ -4296,7 +4139,7 @@ paths:
       produces:
       - application/json
       responses:
-        "201":
+        "200":
           description: The subscription
           schema:
             $ref: '#/definitions/models.Subscription'
@@ -4650,7 +4493,7 @@ paths:
       produces:
       - application/json
       responses:
-        "201":
+        "200":
           description: The created label relation object.
           schema:
             $ref: '#/definitions/models.LabelTask'
@@ -4779,7 +4622,7 @@ paths:
       produces:
       - application/json
       responses:
-        "201":
+        "200":
           description: The created assingee object.
           schema:
             $ref: '#/definitions/models.TaskAssginee'
@@ -4855,7 +4698,7 @@ paths:
       produces:
       - application/json
       responses:
-        "201":
+        "200":
           description: The created assingees object.
           schema:
             $ref: '#/definitions/models.TaskAssginee'
@@ -4922,7 +4765,7 @@ paths:
       produces:
       - application/json
       responses:
-        "201":
+        "200":
           description: The created task comment object.
           schema:
             $ref: '#/definitions/models.TaskComment'
@@ -5083,7 +4926,7 @@ paths:
       produces:
       - application/json
       responses:
-        "201":
+        "200":
           description: The updated labels object.
           schema:
             $ref: '#/definitions/models.LabelTaskBulk'
@@ -5123,7 +4966,7 @@ paths:
       produces:
       - application/json
       responses:
-        "201":
+        "200":
           description: The created task relation object.
           schema:
             $ref: '#/definitions/models.TaskRelation'
@@ -5164,7 +5007,7 @@ paths:
         type: string
       - description: The id of the other task.
         in: path
-        name: otherTaskId
+        name: otherTaskID
         required: true
         type: integer
       produces:
@@ -5363,7 +5206,7 @@ paths:
       produces:
       - application/json
       responses:
-        "201":
+        "200":
           description: The created team.
           schema:
             $ref: '#/definitions/models.Team'
@@ -5496,7 +5339,7 @@ paths:
       produces:
       - application/json
       responses:
-        "201":
+        "200":
           description: The newly created member object
           schema:
             $ref: '#/definitions/models.TeamMember'
@@ -5520,8 +5363,7 @@ paths:
   /teams/{id}/members/{userID}:
     delete:
       description: Remove a user from a team. This will also revoke any access this
-        user might have via that team. A user can remove themselves from the team
-        if they are not the last user in the team.
+        user might have via that team.
       parameters:
       - description: Team ID
         in: path
@@ -5662,159 +5504,6 @@ paths:
           schema:
             $ref: '#/definitions/models.Message'
       summary: Confirm the email of a new user
-      tags:
-      - user
-  /user/deletion/cancel:
-    post:
-      consumes:
-      - application/json
-      description: Aborts an in-progress user deletion.
-      parameters:
-      - description: The user password to confirm.
-        in: body
-        name: credentials
-        required: true
-        schema:
-          $ref: '#/definitions/v1.UserPasswordConfirmation'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.Message'
-        "412":
-          description: Bad password provided.
-          schema:
-            $ref: '#/definitions/web.HTTPError'
-        "500":
-          description: Internal error
-          schema:
-            $ref: '#/definitions/models.Message'
-      summary: Abort a user deletion request
-      tags:
-      - user
-  /user/deletion/confirm:
-    post:
-      consumes:
-      - application/json
-      description: Confirms the deletion request of a user sent via email.
-      parameters:
-      - description: The token.
-        in: body
-        name: credentials
-        required: true
-        schema:
-          $ref: '#/definitions/v1.UserDeletionRequestConfirm'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.Message'
-        "412":
-          description: Bad token provided.
-          schema:
-            $ref: '#/definitions/web.HTTPError'
-        "500":
-          description: Internal error
-          schema:
-            $ref: '#/definitions/models.Message'
-      summary: Confirm a user deletion request
-      tags:
-      - user
-  /user/deletion/request:
-    post:
-      consumes:
-      - application/json
-      description: Requests the deletion of the current user. It will trigger an email
-        which has to be confirmed to start the deletion.
-      parameters:
-      - description: The user password.
-        in: body
-        name: credentials
-        required: true
-        schema:
-          $ref: '#/definitions/v1.UserPasswordConfirmation'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.Message'
-        "412":
-          description: Bad password provided.
-          schema:
-            $ref: '#/definitions/web.HTTPError'
-        "500":
-          description: Internal error
-          schema:
-            $ref: '#/definitions/models.Message'
-      summary: Request the deletion of the user
-      tags:
-      - user
-  /user/export/download:
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: User password to confirm the download.
-        in: body
-        name: password
-        required: true
-        schema:
-          $ref: '#/definitions/v1.UserPasswordConfirmation'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.Message'
-        "400":
-          description: Something's invalid.
-          schema:
-            $ref: '#/definitions/web.HTTPError'
-        "500":
-          description: Internal server error.
-          schema:
-            $ref: '#/definitions/models.Message'
-      security:
-      - JWTKeyAuth: []
-      summary: Download a user data export.
-      tags:
-      - user
-  /user/export/request:
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: User password to confirm the data export request.
-        in: body
-        name: password
-        required: true
-        schema:
-          $ref: '#/definitions/v1.UserPasswordConfirmation'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.Message'
-        "400":
-          description: Something's invalid.
-          schema:
-            $ref: '#/definitions/web.HTTPError'
-        "500":
-          description: Internal server error.
-          schema:
-            $ref: '#/definitions/models.Message'
-      security:
-      - JWTKeyAuth: []
-      summary: Request a user data export.
       tags:
       - user
   /user/password:
@@ -6074,101 +5763,6 @@ paths:
       summary: Change general user settings of the current user.
       tags:
       - user
-  /user/settings/token/caldav:
-    get:
-      consumes:
-      - application/json
-      description: Return the IDs and created dates of all caldav tokens for the current
-        user.
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              $ref: '#/definitions/user.Token'
-            type: array
-        "400":
-          description: Something's invalid.
-          schema:
-            $ref: '#/definitions/web.HTTPError'
-        "404":
-          description: User does not exist.
-          schema:
-            $ref: '#/definitions/web.HTTPError'
-        "500":
-          description: Internal server error.
-          schema:
-            $ref: '#/definitions/models.Message'
-      security:
-      - JWTKeyAuth: []
-      summary: Returns the caldav tokens for the current user
-      tags:
-      - user
-    put:
-      consumes:
-      - application/json
-      description: Generates a caldav token which can be used for the caldav api.
-        It is not possible to see the token again after it was generated.
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/user.Token'
-        "400":
-          description: Something's invalid.
-          schema:
-            $ref: '#/definitions/web.HTTPError'
-        "404":
-          description: User does not exist.
-          schema:
-            $ref: '#/definitions/web.HTTPError'
-        "500":
-          description: Internal server error.
-          schema:
-            $ref: '#/definitions/models.Message'
-      security:
-      - JWTKeyAuth: []
-      summary: Generate a caldav token
-      tags:
-      - user
-  /user/settings/token/caldav/{id}:
-    get:
-      consumes:
-      - application/json
-      parameters:
-      - description: Token ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.Message'
-        "400":
-          description: Something's invalid.
-          schema:
-            $ref: '#/definitions/web.HTTPError'
-        "404":
-          description: User does not exist.
-          schema:
-            $ref: '#/definitions/web.HTTPError'
-        "500":
-          description: Internal server error.
-          schema:
-            $ref: '#/definitions/models.Message'
-      security:
-      - JWTKeyAuth: []
-      summary: Delete a caldav token by id
-      tags:
-      - user
   /user/settings/totp:
     get:
       consumes:
@@ -6318,32 +5912,6 @@ paths:
       security:
       - JWTKeyAuth: []
       summary: Totp QR Code
-      tags:
-      - user
-  /user/timezones:
-    get:
-      consumes:
-      - application/json
-      description: Because available time zones depend on the system Vikunja is running
-        on, this endpoint returns a list of all valid time zones this particular Vikunja
-        instance can handle. The list of time zones is not sorted, you should sort
-        it on the client.
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: All available time zones.
-          schema:
-            items:
-              type: string
-            type: array
-        "500":
-          description: Internal server error.
-          schema:
-            $ref: '#/definitions/models.Message'
-      security:
-      - JWTKeyAuth: []
-      summary: Get all available time zones on this vikunja instance
       tags:
       - user
   /user/token:

@@ -11,20 +11,16 @@ menu:
 
 # Installing
 
-Vikunja consists of two parts: [API](https://code.vikunja.io/api) and [frontend](https://code.vikunja.io/frontend).
+Vikunja consists of two parts: [Backend](https://code.vikunja.io/api) and [frontend](https://code.vikunja.io/frontend).
+While the backend is required, the frontend is not.
+You don't neccesarily need to have a web-frontend, using Vikunja via the [mobile app](https://code.vikunja.io/app) is totally fine.
 
-You will always need to install at least the API.
-To actually use Vikunja you'll also need to somehow install a frontend to use it.
-You can either:
+However, using the web frontend is highly reccommended.
 
-* [Install the web frontend]({{< ref "install-frontend.md">}})
-* Use the desktop app, which is essentially a web frontend packaged for easy installation on desktop devices
-* Use the mobile app only, but as of right now it only supports the very basic features of Vikunja
-
-Vikunja can be installed in various ways. 
+Vikunja can be installed in various forms. 
 This document provides an overview and instructions for the different methods.
 
-* [API]({{< ref "install-backend.md">}})
+* [Backend]({{< ref "install-backend.md">}})
   * [Installing from binary]({{< ref "install-backend.md#install-from-binary">}})
     * [Verify the GPG signature]({{< ref "install-backend.md#verify-the-gpg-signature">}})
     * [Set it up]({{< ref "install-backend.md#set-it-up">}})
@@ -43,16 +39,3 @@ This document provides an overview and instructions for the different methods.
 * [Reverse proxies]({{< ref "reverse-proxies.md">}})
 * [Full docker example]({{< ref "full-docker-example.md">}})
 * [Backups]({{< ref "backups.md">}})
-
-## Installation on kubernetes
-
-A third-party Helm Chart is available from the k8s-at-home project [here](https://github.com/k8s-at-home/charts/tree/master/charts/stable/vikunja).
-
-## Other installation resources
-
-* [Docker Compose is MUCH Easier Than you Think - Let's Install Vikunja](https://www.youtube.com/watch?v=fGlz2PkXjuo) (Youtube)
-* [Setup Vikunja using Docker Compose - Homelab Wiki](https://thehomelab.wiki/books/docker/page/setup-vikunja-using-docker-compose)
-* [A Closer look at Vikunja - Email Notifications - Enable or Disable Registrations - Allow Attachments](https://www.youtube.com/watch?v=47wj9pRT6Gw) (Youtube)
-* [Install Vikunja in Docker for self-hosted Task Tracking](https://smarthomepursuits.com/install-vikunja-in-docker-for-self-hosted-task-tracking/)
-* [Self-Hosted To-Do List with Vikunja in Docker](https://www.youtube.com/watch?v=DqyqDWpEvKI) (Youtube)
-* [Vikunja self-hosted (step by step)](https://nguyenminhhung.com/vikunja-self-hosted-step-by-step/)

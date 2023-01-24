@@ -36,6 +36,5 @@ func GetTables() []interface{} {
 	return []interface{}{
 		&User{},
 		&TOTP{},
-		&Token{},
 	}
 }

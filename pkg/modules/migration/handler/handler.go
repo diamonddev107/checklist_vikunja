@@ -84,5 +84,15 @@ func (mw *MigrationWeb) Migrate(c echo.Context) error {
 func (mw *MigrationWeb) Status(c echo.Context) error {
 	ms := mw.MigrationStruct()
 
-	return status(ms, c)
+	user, err := user2.GetCurrentUser(c)
+	if err != nil {
+		return handler.HandleHTTPError(err, c)
+	}
+
+	status, err := migration.GetMigrationStatus(ms, user)
+	if err != nil {
+		return handler.HandleHTTPError(err, c)
+	}
+
+	return c.JSON(http.StatusOK, status)
 }

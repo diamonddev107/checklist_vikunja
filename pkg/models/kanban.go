@@ -41,9 +41,6 @@ type Bucket struct {
 	// If this bucket is the "done bucket". All tasks moved into this bucket will automatically marked as done. All tasks marked as done from elsewhere will be moved into this bucket.
 	IsDoneBucket bool `xorm:"BOOL" json:"is_done_bucket"`
 
-	// The position this bucket has when querying all buckets. See the tasks.position property on how to use this.
-	Position float64 `xorm:"double null" json:"position"`
-
 	// A timestamp when this bucket was created. You cannot change this value.
 	Created time.Time `xorm:"created not null" json:"created"`
 	// A timestamp when this bucket was last updated. You cannot change this value.
@@ -81,7 +78,7 @@ func getDefaultBucket(s *xorm.Session, listID int64) (bucket *Bucket, err error)
 	bucket = &Bucket{}
 	_, err = s.
 		Where("list_id = ?", listID).
-		OrderBy("position asc").
+		OrderBy("id asc").
 		Get(bucket)
 	return
 }
@@ -137,10 +134,7 @@ func (b *Bucket) ReadAll(s *xorm.Session, auth web.Auth, search string, page int
 
 	// Get all buckets for this list
 	buckets := []*Bucket{}
-	err = s.
-		Where("list_id = ?", b.ListID).
-		OrderBy("position").
-		Find(&buckets)
+	err = s.Where("list_id = ?", b.ListID).Find(&buckets)
 	if err != nil {
 		return
 	}
@@ -173,7 +167,7 @@ func (b *Bucket) ReadAll(s *xorm.Session, auth web.Auth, search string, page int
 	opts.sortby = []*sortParam{
 		{
 			orderBy: orderAscending,
-			sortBy:  taskPropertyKanbanPosition,
+			sortBy:  taskPropertyPosition,
 		},
 	}
 	opts.page = page
@@ -215,7 +209,7 @@ func (b *Bucket) ReadAll(s *xorm.Session, auth web.Auth, search string, page int
 		taskMap[t.ID] = t
 	}
 
-	err = addMoreInfoToTasks(s, taskMap, auth)
+	err = addMoreInfoToTasks(s, taskMap)
 	if err != nil {
 		return nil, 0, 0, err
 	}
@@ -257,12 +251,6 @@ func (b *Bucket) Create(s *xorm.Session, a web.Auth) (err error) {
 	b.CreatedByID = b.CreatedBy.ID
 
 	_, err = s.Insert(b)
-	if err != nil {
-		return
-	}
-
-	b.Position = calculateDefaultPosition(b.ID, b.Position)
-	_, err = s.Where("id = ?", b.ID).Update(b)
 	return
 }
 
@@ -287,7 +275,7 @@ func (b *Bucket) Update(s *xorm.Session, a web.Auth) (err error) {
 		return err
 	}
 
-	if doneBucket != nil && doneBucket.IsDoneBucket && b.IsDoneBucket && doneBucket.ID != b.ID {
+	if doneBucket != nil && doneBucket.IsDoneBucket && b.IsDoneBucket {
 		return &ErrOnlyOneDoneBucketPerList{
 			BucketID:     b.ID,
 			ListID:       b.ListID,
@@ -301,7 +289,6 @@ func (b *Bucket) Update(s *xorm.Session, a web.Auth) (err error) {
 			"title",
 			"limit",
 			"is_done_bucket",
-			"position",
 		).
 		Update(b)
 	return

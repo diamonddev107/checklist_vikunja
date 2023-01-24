@@ -18,7 +18,6 @@ package models
 
 import (
 	"bufio"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -59,29 +58,17 @@ func (n *ReminderDueNotification) Name() string {
 
 // TaskCommentNotification represents a TaskCommentNotification notification
 type TaskCommentNotification struct {
-	Doer      *user.User   `json:"doer"`
-	Task      *Task        `json:"task"`
-	Comment   *TaskComment `json:"comment"`
-	Mentioned bool         `json:"mentioned"`
-}
-
-func (n *TaskCommentNotification) SubjectID() int64 {
-	return n.Comment.ID
+	Doer    *user.User   `json:"doer"`
+	Task    *Task        `json:"task"`
+	Comment *TaskComment `json:"comment"`
 }
 
 // ToMail returns the mail notification for TaskCommentNotification
 func (n *TaskCommentNotification) ToMail() *notifications.Mail {
 
 	mail := notifications.NewMail().
-		From(n.Doer.GetNameAndFromEmail())
-
-	subject := "Re: " + n.Task.Title
-	if n.Mentioned {
-		subject = n.Doer.GetName() + ` mentioned you in a comment in "` + n.Task.Title + `"`
-		mail.Line("**" + n.Doer.GetName() + "** mentioned you in a comment:")
-	}
-
-	mail.Subject(subject)
+		From(n.Doer.GetNameAndFromEmail()).
+		Subject("Re: " + n.Task.Title)
 
 	lines := bufio.NewScanner(strings.NewReader(n.Comment.Comment))
 	for lines.Scan() {
@@ -113,7 +100,7 @@ type TaskAssignedNotification struct {
 func (n *TaskAssignedNotification) ToMail() *notifications.Mail {
 	return notifications.NewMail().
 		Subject(n.Task.Title+"("+n.Task.GetFullIdentifier()+")"+" has been assigned to "+n.Assignee.GetName()).
-		Line(n.Doer.GetName()+" has assigned this task to "+n.Assignee.GetName()+".").
+		Line(n.Doer.GetName()+" has assigned this task to "+n.Assignee.GetName()).
 		Action("View Task", n.Task.GetFrontendURL())
 }
 
@@ -231,23 +218,14 @@ func (n *UndoneTaskOverdueNotification) Name() string {
 // UndoneTasksOverdueNotification represents a UndoneTasksOverdueNotification notification
 type UndoneTasksOverdueNotification struct {
 	User  *user.User
-	Tasks map[int64]*Task
+	Tasks []*Task
 }
 
 // ToMail returns the mail notification for UndoneTasksOverdueNotification
 func (n *UndoneTasksOverdueNotification) ToMail() *notifications.Mail {
 
-	sortedTasks := make([]*Task, 0, len(n.Tasks))
-	for _, task := range n.Tasks {
-		sortedTasks = append(sortedTasks, task)
-	}
-
-	sort.Slice(sortedTasks, func(i, j int) bool {
-		return sortedTasks[i].DueDate.Before(sortedTasks[j].DueDate)
-	})
-
 	overdueLine := ""
-	for _, task := range sortedTasks {
+	for _, task := range n.Tasks {
 		until := time.Until(task.DueDate).Round(1*time.Hour) * -1
 		overdueLine += `* [` + task.Title + `](` + config.ServiceFrontendurl.GetString() + "tasks/" + strconv.FormatInt(task.ID, 10) + `), overdue since ` + utils.HumanizeDuration(until) + "\n"
 	}
@@ -269,72 +247,4 @@ func (n *UndoneTasksOverdueNotification) ToDB() interface{} {
 // Name returns the name of the notification
 func (n *UndoneTasksOverdueNotification) Name() string {
 	return "task.undone.overdue"
-}
-
-// UserMentionedInTaskNotification represents a UserMentionedInTaskNotification notification
-type UserMentionedInTaskNotification struct {
-	Doer  *user.User `json:"doer"`
-	Task  *Task      `json:"task"`
-	IsNew bool       `json:"is_new"`
-}
-
-func (n *UserMentionedInTaskNotification) SubjectID() int64 {
-	return n.Task.ID
-}
-
-// ToMail returns the mail notification for UserMentionedInTaskNotification
-func (n *UserMentionedInTaskNotification) ToMail() *notifications.Mail {
-	subject := n.Doer.GetName() + ` mentioned you in a new task "` + n.Task.Title + `"`
-	if n.IsNew {
-		subject = n.Doer.GetName() + ` mentioned you in a task "` + n.Task.Title + `"`
-	}
-
-	mail := notifications.NewMail().
-		From(n.Doer.GetNameAndFromEmail()).
-		Subject(subject).
-		Line("**" + n.Doer.GetName() + "** mentioned you in a task:")
-
-	lines := bufio.NewScanner(strings.NewReader(n.Task.Description))
-	for lines.Scan() {
-		mail.Line(lines.Text())
-	}
-
-	return mail.
-		Action("View Task", n.Task.GetFrontendURL())
-}
-
-// ToDB returns the UserMentionedInTaskNotification notification in a format which can be saved in the db
-func (n *UserMentionedInTaskNotification) ToDB() interface{} {
-	return n
-}
-
-// Name returns the name of the notification
-func (n *UserMentionedInTaskNotification) Name() string {
-	return "task.mentioned"
-}
-
-// DataExportReadyNotification represents a DataExportReadyNotification notification
-type DataExportReadyNotification struct {
-	User *user.User `json:"user"`
-}
-
-// ToMail returns the mail notification for DataExportReadyNotification
-func (n *DataExportReadyNotification) ToMail() *notifications.Mail {
-	return notifications.NewMail().
-		Subject("Your Vikunja Data Export is ready").
-		Greeting("Hi "+n.User.GetName()+",").
-		Line("Your Vikunja Data Export is ready for you to download. Click the button below to download it:").
-		Action("Download", config.ServiceFrontendurl.GetString()+"user/export/download").
-		Line("The download will be available for the next 7 days.").
-		Line("Have a nice day!")
-}
-
-// ToDB returns the DataExportReadyNotification notification in a format which can be saved in the db
-func (n *DataExportReadyNotification) ToDB() interface{} {
-	return nil
-}
-
-// Name returns the name of the notification
-func (n *DataExportReadyNotification) Name() string {
-	return "data.export.ready"
 }

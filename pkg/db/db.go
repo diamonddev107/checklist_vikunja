@@ -28,9 +28,9 @@ import (
 	"code.vikunja.io/api/pkg/config"
 	"code.vikunja.io/api/pkg/log"
 	xrc "gitea.com/xorm/xorm-redis-cache"
+	"xorm.io/core"
 	"xorm.io/xorm"
 	"xorm.io/xorm/caches"
-	"xorm.io/xorm/names"
 	"xorm.io/xorm/schemas"
 
 	_ "github.com/go-sql-driver/mysql" // Because.
@@ -81,7 +81,7 @@ func CreateDBEngine() (engine *xorm.Engine, err error) {
 		log.Fatalf("Error parsing time zone: %s", err)
 	}
 	engine.SetTZDatabase(loc)
-	engine.SetMapper(names.GonicMapper{})
+	engine.SetMapper(core.GonicMapper{})
 	logger := log.NewXormLogger("")
 	engine.SetLogger(logger)
 
@@ -148,33 +148,15 @@ func parsePostgreSQLHostPort(info string) (string, string) {
 	return host, port
 }
 
-// Copied and adopted from https://github.com/go-gitea/gitea/blob/f337c32e868381c6d2d948221aca0c59f8420c13/modules/setting/database.go#L176-L186
-func getPostgreSQLConnectionString(dbHost, dbUser, dbPasswd, dbName, dbSslMode, dbSslCert, dbSslKey, dbSslRootCert string) (connStr string) {
-	dbParam := "?"
-	if strings.Contains(dbName, dbParam) {
-		dbParam = "&"
-	}
-	host, port := parsePostgreSQLHostPort(dbHost)
-	if host[0] == '/' { // looks like a unix socket
-		connStr = fmt.Sprintf("postgres://%s:%s@:%s/%s%ssslmode=%s&sslcert=%s&sslkey=%s&sslrootcert=%s&host=%s",
-			url.PathEscape(dbUser), url.PathEscape(dbPasswd), port, dbName, dbParam, dbSslMode, dbSslCert, dbSslKey, dbSslRootCert, host)
-	} else {
-		connStr = fmt.Sprintf("postgres://%s:%s@%s:%s/%s%ssslmode=%s&sslcert=%s&sslkey=%s&sslrootcert=%s",
-			url.PathEscape(dbUser), url.PathEscape(dbPasswd), host, port, dbName, dbParam, dbSslMode, dbSslCert, dbSslKey, dbSslRootCert)
-	}
-	return connStr
-}
-
 func initPostgresEngine() (engine *xorm.Engine, err error) {
-	connStr := getPostgreSQLConnectionString(
-		config.DatabaseHost.GetString(),
-		config.DatabaseUser.GetString(),
-		config.DatabasePassword.GetString(),
+	host, port := parsePostgreSQLHostPort(config.DatabaseHost.GetString())
+	connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+		host,
+		port,
+		url.PathEscape(config.DatabaseUser.GetString()),
+		url.PathEscape(config.DatabasePassword.GetString()),
 		config.DatabaseDatabase.GetString(),
 		config.DatabaseSslMode.GetString(),
-		config.DatabaseSslCert.GetString(),
-		config.DatabaseSslKey.GetString(),
-		config.DatabaseSslRootCert.GetString(),
 	)
 
 	engine, err = xorm.NewEngine("postgres", connStr)
@@ -204,7 +186,7 @@ func initSqliteEngine() (engine *xorm.Engine, err error) {
 	}
 	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0)
 	if err != nil {
-		return nil, fmt.Errorf("could not open database file [uid=%d, gid=%d]: %w", os.Getuid(), os.Getgid(), err)
+		return nil, fmt.Errorf("could not open database file [uid=%d, gid=%d]: %s", os.Getuid(), os.Getgid(), err)
 	}
 	_ = file.Close() // We directly close the file because we only want to check if it is writable. It will be reopened lazily later by xorm.
 

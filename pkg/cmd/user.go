@@ -17,14 +17,11 @@
 package cmd
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/asaskevich/govalidator"
 
 	"code.vikunja.io/api/pkg/db"
 	"code.vikunja.io/api/pkg/initialize"
@@ -45,7 +42,6 @@ var (
 	userFlagResetPasswordDirectly bool
 	userFlagEnableUser            bool
 	userFlagDisableUser           bool
-	userFlagDeleteNow             bool
 )
 
 func init() {
@@ -70,10 +66,7 @@ func init() {
 	userChangeEnabledCmd.Flags().BoolVarP(&userFlagDisableUser, "disable", "d", false, "Disable the user.")
 	userChangeEnabledCmd.Flags().BoolVarP(&userFlagEnableUser, "enable", "e", false, "Enable the user.")
 
-	// User deletion flags
-	userDeleteCmd.Flags().BoolVarP(&userFlagDeleteNow, "now", "n", false, "If provided, deletes the user immediately instead of sending them an email first.")
-
-	userCmd.AddCommand(userListCmd, userCreateCmd, userUpdateCmd, userResetPasswordCmd, userChangeEnabledCmd, userDeleteCmd)
+	userCmd.AddCommand(userListCmd, userCreateCmd, userUpdateCmd, userResetPasswordCmd, userChangeEnabledCmd)
 	rootCmd.AddCommand(userCmd)
 }
 
@@ -105,7 +98,7 @@ func getUserFromArg(s *xorm.Session, arg string) *user.User {
 		log.Fatalf("Invalid user id: %s", err)
 	}
 
-	u, err := user.GetUserWithEmail(s, &user.User{ID: id})
+	u, err := user.GetUserByID(s, id)
 	if err != nil {
 		log.Fatalf("Could not get user: %s", err)
 	}
@@ -142,7 +135,7 @@ var userListCmd = &cobra.Command{
 			"ID",
 			"Username",
 			"Email",
-			"Status",
+			"Active",
 			"Created",
 			"Updated",
 		})
@@ -152,7 +145,7 @@ var userListCmd = &cobra.Command{
 				strconv.FormatInt(u.ID, 10),
 				u.Username,
 				u.Email,
-				u.Status.String(),
+				strconv.FormatBool(u.IsActive),
 				u.Created.Format(time.RFC3339),
 				u.Updated.Format(time.RFC3339),
 			})
@@ -177,11 +170,6 @@ var userCreateCmd = &cobra.Command{
 			Email:    userFlagEmail,
 			Password: getPasswordFromFlagOrInput(),
 		}
-
-		if !govalidator.IsEmail(userFlagEmail) {
-			log.Fatalf("Provided email is invalid.")
-		}
-
 		newUser, err := user.CreateUser(s, u)
 		if err != nil {
 			_ = s.Rollback()
@@ -289,15 +277,11 @@ var userChangeEnabledCmd = &cobra.Command{
 		u := getUserFromArg(s, args[0])
 
 		if userFlagEnableUser {
-			u.Status = user.StatusActive
+			u.IsActive = true
 		} else if userFlagDisableUser {
-			u.Status = user.StatusDisabled
+			u.IsActive = false
 		} else {
-			if u.Status == user.StatusActive {
-				u.Status = user.StatusDisabled
-			} else {
-				u.Status = user.StatusActive
-			}
+			u.IsActive = !u.IsActive
 		}
 		_, err := user.UpdateUser(s, u)
 		if err != nil {
@@ -309,64 +293,6 @@ var userChangeEnabledCmd = &cobra.Command{
 			log.Fatalf("Error saving everything: %s", err)
 		}
 
-		fmt.Printf("User status successfully changed, status is now \"%s\"\n", u.Status)
-	},
-}
-
-var userDeleteCmd = &cobra.Command{
-	Use:   "delete [user id]",
-	Short: "Delete an existing user.",
-	Long:  "Kick off the user deletion process. If call without the --now flag, this command will only trigger an email to the user in order for them to confirm and start the deletion process. With the flag the user is deleted immediately. USE WITH CAUTION.",
-	Args:  cobra.ExactArgs(1),
-	PreRun: func(cmd *cobra.Command, args []string) {
-		initialize.FullInit()
-	},
-	Run: func(cmd *cobra.Command, args []string) {
-		if userFlagDeleteNow {
-			fmt.Println("You requested to delete the user immediately. Are you sure?")
-			fmt.Println(`To confirm, please type "yes, I confirm" in all uppercase:`)
-
-			cr := bufio.NewReader(os.Stdin)
-			text, err := cr.ReadString('\n')
-			if err != nil {
-				log.Fatalf("could not read confirmation message: %s", err)
-			}
-			if text != "YES, I CONFIRM\n" {
-				log.Fatalf("invalid confirmation message")
-			}
-		}
-
-		s := db.NewSession()
-		defer s.Close()
-
-		if err := s.Begin(); err != nil {
-			log.Fatalf("Count not start transaction: %s", err)
-		}
-
-		u := getUserFromArg(s, args[0])
-
-		if userFlagDeleteNow {
-			err := models.DeleteUser(s, u)
-			if err != nil {
-				_ = s.Rollback()
-				log.Fatalf("Error removing the user: %s", err)
-			}
-		} else {
-			err := user.RequestDeletion(s, u)
-			if err != nil {
-				_ = s.Rollback()
-				log.Fatalf("Could not request user deletion: %s", err)
-			}
-		}
-
-		if err := s.Commit(); err != nil {
-			log.Fatalf("Error saving everything: %s", err)
-		}
-
-		if userFlagDeleteNow {
-			fmt.Println("User deleted successfully.")
-		} else {
-			fmt.Println("User scheduled for deletion successfully.")
-		}
+		fmt.Printf("User status successfully changed, user is now active: %t.\n", u.IsActive)
 	},
 }

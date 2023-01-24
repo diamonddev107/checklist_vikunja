@@ -45,13 +45,8 @@ func NewWatermillLogger() *WatermillLogger {
 		logger: logging.MustGetLogger(watermillLogModule),
 	}
 
-	cf := config.LogEvents.GetString()
-	var backend logging.Backend
-	backend = &NoopBackend{}
-	if cf != "off" && cf != "false" {
-		logBackend := logging.NewLogBackend(GetLogWriter("events"), "", 0)
-		backend = logging.NewBackendFormatter(logBackend, logging.MustStringFormatter(watermillFmt+"\n"))
-	}
+	logBackend := logging.NewLogBackend(GetLogWriter("events"), "", 0)
+	backend := logging.NewBackendFormatter(logBackend, logging.MustStringFormatter(watermillFmt+"\n"))
 
 	backendLeveled := logging.AddModuleLevel(backend)
 	backendLeveled.SetLevel(level, watermillLogModule)

@@ -20,20 +20,18 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"strconv"
 	"time"
 
 	"code.vikunja.io/api/pkg/config"
+
 	"code.vikunja.io/api/pkg/db"
-	"code.vikunja.io/api/pkg/log"
-	"code.vikunja.io/api/pkg/modules/keyvalue"
-	"code.vikunja.io/api/pkg/notifications"
+
+	"xorm.io/xorm"
 
 	"code.vikunja.io/web"
-	"github.com/golang-jwt/jwt/v4"
+	"github.com/dgrijalva/jwt-go"
 	"github.com/labstack/echo/v4"
 	"golang.org/x/crypto/bcrypt"
-	"xorm.io/xorm"
 )
 
 // Login Object to recive user credentials in JSON format
@@ -44,30 +42,7 @@ type Login struct {
 	Password string `json:"password"`
 	// The totp passcode of a user. Only needs to be provided when enabled.
 	TOTPPasscode string `json:"totp_passcode"`
-	// If true, the token returned will be valid a lot longer than default. Useful for "remember me" style logins.
-	LongToken bool `json:"long_token"`
 }
-
-type Status int
-
-func (s Status) String() string {
-	switch s {
-	case StatusActive:
-		return "Active"
-	case StatusEmailConfirmationRequired:
-		return "Email Confirmation required"
-	case StatusDisabled:
-		return "Disabled"
-	}
-
-	return "Unknown"
-}
-
-const (
-	StatusActive = iota
-	StatusEmailConfirmationRequired
-	StatusDisabled
-)
 
 // User holds information about an user
 type User struct {
@@ -79,9 +54,11 @@ type User struct {
 	Username string `xorm:"varchar(250) not null unique" json:"username" valid:"length(1|250)" minLength:"1" maxLength:"250"`
 	Password string `xorm:"varchar(250) null" json:"-"`
 	// The user's email address.
-	Email string `xorm:"varchar(250) null" json:"email,omitempty" valid:"email,length(0|250)" maxLength:"250"`
+	Email    string `xorm:"varchar(250) null" json:"email,omitempty" valid:"email,length(0|250)" maxLength:"250"`
+	IsActive bool   `xorm:"null" json:"-"`
 
-	Status Status `xorm:"default 0" json:"-"`
+	PasswordResetToken string `xorm:"varchar(450) null" json:"-"`
+	EmailConfirmToken  string `xorm:"varchar(450) null" json:"-"`
 
 	AvatarProvider string `xorm:"varchar(255) null" json:"-"`
 	AvatarFileID   int64  `xorm:"null" json:"-"`
@@ -90,20 +67,10 @@ type User struct {
 	Issuer  string `xorm:"text null" json:"-"`
 	Subject string `xorm:"text null" json:"-"`
 
-	EmailRemindersEnabled        bool   `xorm:"bool default true" json:"-"`
-	DiscoverableByName           bool   `xorm:"bool default false index" json:"-"`
-	DiscoverableByEmail          bool   `xorm:"bool default false index" json:"-"`
-	OverdueTasksRemindersEnabled bool   `xorm:"bool default true index" json:"-"`
-	OverdueTasksRemindersTime    string `xorm:"varchar(5) not null default '09:00'" json:"-"`
-	DefaultListID                int64  `xorm:"bigint null index" json:"-"`
-	WeekStart                    int    `xorm:"null" json:"-"`
-	Language                     string `xorm:"varchar(50) null" json:"-"`
-	Timezone                     string `xorm:"varchar(255) null" json:"-"`
-
-	DeletionScheduledAt      time.Time `xorm:"datetime null" json:"-"`
-	DeletionLastReminderSent time.Time `xorm:"datetime null" json:"-"`
-
-	ExportFileID int64 `xorm:"bigint null" json:"-"`
+	EmailRemindersEnabled        bool `xorm:"bool default true" json:"-"`
+	DiscoverableByName           bool `xorm:"bool default false index" json:"-"`
+	DiscoverableByEmail          bool `xorm:"bool default false index" json:"-"`
+	OverdueTasksRemindersEnabled bool `xorm:"bool default true index" json:"-"`
 
 	// A timestamp when this task was created. You cannot change this value.
 	Created time.Time `xorm:"created not null" json:"created"`
@@ -158,14 +125,6 @@ func (u *User) GetNameAndFromEmail() string {
 	return u.GetName() + " via Vikunja <" + config.MailerFromEmail.GetString() + ">"
 }
 
-func (u *User) GetFailedTOTPAttemptsKey() string {
-	return "failed_totp_attempts_" + strconv.FormatInt(u.ID, 10)
-}
-
-func (u *User) GetFailedPasswordAttemptsKey() string {
-	return "failed_password_attempts_" + strconv.FormatInt(u.ID, 10)
-}
-
 // GetFromAuth returns a user object from a web.Auth object and returns an error if the underlying type
 // is not a user object
 func GetFromAuth(a web.Auth) (*User, error) {
@@ -200,7 +159,7 @@ func (apiUser *APIUserPassword) APIFormat() *User {
 
 // GetUserByID gets informations about a user by its ID
 func GetUserByID(s *xorm.Session, id int64) (user *User, err error) {
-	// Apparently xorm does otherwise look for all users but return only one, which leads to returning one even if the ID is 0
+	// Apparently xorm does otherwise look for all users but return only one, which leads to returing one even if the ID is 0
 	if id < 1 {
 		return &User{}, ErrUserDoesNotExist{}
 	}
@@ -215,27 +174,6 @@ func GetUserByUsername(s *xorm.Session, username string) (user *User, err error)
 	}
 
 	return getUser(s, &User{Username: username}, false)
-}
-
-// GetUsersByUsername returns a slice of users with the provided usernames
-func GetUsersByUsername(s *xorm.Session, usernames []string, withEmails bool) (users map[int64]*User, err error) {
-	if len(usernames) == 0 {
-		return
-	}
-
-	users = make(map[int64]*User)
-	err = s.In("username", usernames).Find(&users)
-	if err != nil {
-		return
-	}
-
-	if !withEmails {
-		for _, u := range users {
-			u.Email = ""
-		}
-	}
-
-	return
 }
 
 // GetUserWithEmail returns a user object with email
@@ -280,10 +218,6 @@ func getUser(s *xorm.Session, user *User, withEmail bool) (userOut *User, err er
 		userOut.Email = ""
 	}
 
-	if userOut.OverdueTasksRemindersTime == "" {
-		userOut.OverdueTasksRemindersTime = "9:00"
-	}
-
 	return userOut, err
 }
 
@@ -318,58 +252,18 @@ func CheckUserCredentials(s *xorm.Session, u *Login) (*User, error) {
 		return nil, ErrWrongUsernameOrPassword{}
 	}
 
-	if user.Issuer != IssuerLocal {
-		return user, &ErrAccountIsNotLocal{UserID: user.ID}
-	}
-
 	// The user is invalid if they need to verify their email address
-	if user.Status == StatusEmailConfirmationRequired {
+	if !user.IsActive {
 		return &User{}, ErrEmailNotConfirmed{UserID: user.ID}
 	}
 
 	// Check the users password
 	err = CheckUserPassword(user, u.Password)
 	if err != nil {
-		if IsErrWrongUsernameOrPassword(err) {
-			handleFailedPassword(user)
-		}
-		return user, err
+		return nil, err
 	}
 
 	return user, nil
-}
-
-func handleFailedPassword(user *User) {
-	key := user.GetFailedPasswordAttemptsKey()
-	err := keyvalue.IncrBy(key, 1)
-	if err != nil {
-		log.Errorf("Could not set failed password attempts: %s", err)
-		return
-	}
-
-	a, _, err := keyvalue.Get(key)
-	if err != nil {
-		log.Errorf("Could get failed password attempts for user %d: %s", user.ID, err)
-		return
-	}
-	attempts := a.(int64)
-	if attempts != 3 {
-		return
-	}
-
-	err = notifications.Notify(user, &FailedLoginAttemptNotification{
-		User: user,
-	})
-	if err != nil {
-		log.Errorf("Could not send invalid password mail to user: %s", err)
-		return
-	}
-
-	err = keyvalue.Del(key)
-	if err != nil {
-		log.Errorf("Could not remove failed password attempts: %s", err)
-		return
-	}
 }
 
 // CheckUserPassword checks and verifies a user's password. The user object needs to contain the hashed password from the database.
@@ -383,16 +277,6 @@ func CheckUserPassword(user *User, password string) error {
 	}
 
 	return nil
-}
-
-// GetCurrentUserFromDB gets a user from jwt claims and returns the full user from the db.
-func GetCurrentUserFromDB(s *xorm.Session, c echo.Context) (user *User, err error) {
-	u, err := GetCurrentUser(c)
-	if err != nil {
-		return nil, err
-	}
-
-	return GetUserByID(s, u.ID)
 }
 
 // GetCurrentUser returns the current user based on its jwt token
@@ -468,20 +352,9 @@ func UpdateUser(s *xorm.Session, user *User) (updatedUser *User, err error) {
 		if user.AvatarProvider != "default" &&
 			user.AvatarProvider != "gravatar" &&
 			user.AvatarProvider != "initials" &&
-			user.AvatarProvider != "upload" &&
-			user.AvatarProvider != "marble" {
+			user.AvatarProvider != "upload" {
 			return updatedUser, &ErrInvalidAvatarProvider{AvatarProvider: user.AvatarProvider}
 		}
-	}
-
-	// Check if we have a valid time zone
-	if user.Timezone == "" {
-		user.Timezone = config.GetTimeZone().String()
-	}
-
-	_, err = time.LoadLocation(user.Timezone)
-	if err != nil {
-		return
 	}
 
 	// Update it
@@ -498,11 +371,6 @@ func UpdateUser(s *xorm.Session, user *User) (updatedUser *User, err error) {
 			"discoverable_by_name",
 			"discoverable_by_email",
 			"overdue_tasks_reminders_enabled",
-			"default_list_id",
-			"week_start",
-			"language",
-			"timezone",
-			"overdue_tasks_reminders_time",
 		).
 		Update(user)
 	if err != nil {
@@ -545,14 +413,4 @@ func UpdateUserPassword(s *xorm.Session, user *User, newPassword string) (err er
 	}
 
 	return err
-}
-
-// SetStatus sets a users status in the database
-func (u *User) SetStatus(s *xorm.Session, status Status) (err error) {
-	u.Status = status
-	_, err = s.
-		Where("id = ?", u.ID).
-		Cols("status").
-		Update(u)
-	return
 }

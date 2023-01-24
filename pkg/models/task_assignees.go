@@ -19,10 +19,6 @@ package models
 import (
 	"time"
 
-	"code.vikunja.io/api/pkg/db"
-
-	"xorm.io/builder"
-
 	"code.vikunja.io/api/pkg/events"
 
 	"code.vikunja.io/api/pkg/user"
@@ -191,7 +187,7 @@ func (la *TaskAssginee) Delete(s *xorm.Session, a web.Auth) (err error) {
 // @Security JWTKeyAuth
 // @Param assignee body models.TaskAssginee true "The assingee object"
 // @Param taskID path int true "Task ID"
-// @Success 201 {object} models.TaskAssginee "The created assingee object."
+// @Success 200 {object} models.TaskAssginee "The created assingee object."
 // @Failure 400 {object} web.HTTPError "Invalid assignee object provided."
 // @Failure 500 {object} models.Message "Internal error"
 // @Router /tasks/{taskID}/assignees [put]
@@ -219,19 +215,6 @@ func (t *Task) addNewAssigneeByID(s *xorm.Session, newAssigneeID int64, list *Li
 	}
 	if !canRead {
 		return ErrUserDoesNotHaveAccessToList{list.ID, newAssigneeID}
-	}
-
-	exist, err := s.
-		Where("task_id = ? AND user_id = ?", t.ID, newAssigneeID).
-		Exist(&TaskAssginee{})
-	if err != nil {
-		return err
-	}
-	if exist {
-		return &ErrUserAlreadyAssigned{
-			UserID: newAssigneeID,
-			TaskID: t.ID,
-		}
 	}
 
 	_, err = s.Insert(TaskAssginee{
@@ -284,14 +267,12 @@ func (la *TaskAssginee) ReadAll(s *xorm.Session, a web.Auth, search string, page
 		return nil, 0, 0, ErrGenericForbidden{}
 	}
 	limit, start := getLimitFromPageIndex(page, perPage)
+
 	var taskAssignees []*user.User
 	query := s.Table("task_assignees").
 		Select("users.*").
 		Join("INNER", "users", "task_assignees.user_id = users.id").
-		Where(builder.And(
-			builder.Eq{"task_id": la.TaskID},
-			db.ILIKE("users.username", search),
-		))
+		Where("task_id = ? AND users.username LIKE ?", la.TaskID, "%"+search+"%")
 	if limit > 0 {
 		query = query.Limit(limit, start)
 	}
@@ -327,7 +308,7 @@ type BulkAssignees struct {
 // @Security JWTKeyAuth
 // @Param assignee body models.BulkAssignees true "The array of assignees"
 // @Param taskID path int true "Task ID"
-// @Success 201 {object} models.TaskAssginee "The created assingees object."
+// @Success 200 {object} models.TaskAssginee "The created assingees object."
 // @Failure 400 {object} web.HTTPError "Invalid assignee object provided."
 // @Failure 500 {object} models.Message "Internal error"
 // @Router /tasks/{taskID}/assignees/bulk [post]

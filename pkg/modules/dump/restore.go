@@ -20,9 +20,7 @@ import (
 	"archive/zip"
 	"bufio"
 	"bytes"
-	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -35,7 +33,6 @@ import (
 	"code.vikunja.io/api/pkg/initialize"
 	"code.vikunja.io/api/pkg/log"
 	"code.vikunja.io/api/pkg/migration"
-
 	"src.techknowlogick.com/xormigrate"
 )
 
@@ -46,7 +43,7 @@ func Restore(filename string) error {
 
 	r, err := zip.OpenReader(filename)
 	if err != nil {
-		return fmt.Errorf("could not open zip file: %w", err)
+		return fmt.Errorf("could not open zip file: %s", err)
 	}
 
 	log.Warning("Restoring a dump will wipe your current installation!")
@@ -54,7 +51,7 @@ func Restore(filename string) error {
 	cr := bufio.NewReader(os.Stdin)
 	text, err := cr.ReadString('\n')
 	if err != nil {
-		return fmt.Errorf("could not read confirmation message: %w", err)
+		return fmt.Errorf("could not read confirmation message: %s", err)
 	}
 	if text != "Yes, I understand\n" {
 		return fmt.Errorf("invalid confirmation message")
@@ -62,7 +59,6 @@ func Restore(filename string) error {
 
 	// Find the configFile, database and files files
 	var configFile *zip.File
-	var dotEnvFile *zip.File
 	dbfiles := make(map[string]*zip.File)
 	filesFiles := make(map[string]*zip.File)
 	for _, file := range r.File {
@@ -75,20 +71,43 @@ func Restore(filename string) error {
 			dbfiles[fname[:len(fname)-5]] = file
 			continue
 		}
-		if file.Name == ".env" {
-			dotEnvFile = file
-			continue
-		}
 		if strings.HasPrefix(file.Name, "files/") {
 			filesFiles[strings.ReplaceAll(file.Name, "files/", "")] = file
 		}
 	}
+	if configFile == nil {
+		return fmt.Errorf("dump does not contain a config file")
+	}
 
 	///////
 	// Restore the config file
-	err = restoreConfig(configFile, dotEnvFile)
+	if configFile.UncompressedSize64 > maxConfigSize {
+		return fmt.Errorf("config file too large, is %d, max size is %d", configFile.UncompressedSize64, maxConfigSize)
+	}
+
+	outFile, err := os.OpenFile(configFile.Name, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, configFile.Mode())
+	if err != nil {
+		return fmt.Errorf("could not open config file for writing: %s", err)
+	}
+
+	cfgr, err := configFile.Open()
 	if err != nil {
 		return err
+	}
+
+	// #nosec - We eliminated the potential decompression bomb by erroring out above if the file is larger than a threshold.
+	_, err = io.Copy(outFile, cfgr)
+	if err != nil {
+		return fmt.Errorf("could not create config file: %s", err)
+	}
+
+	_ = cfgr.Close()
+	_ = outFile.Close()
+
+	log.Infof("The config file has been restored to '%s'.", configFile.Name)
+	log.Infof("You can now make changes to it, hit enter when you're done.")
+	if _, err := bufio.NewReader(os.Stdin).ReadString('\n'); err != nil {
+		return fmt.Errorf("could not read from stdin: %s", err)
 	}
 	log.Info("Restoring...")
 
@@ -101,7 +120,7 @@ func Restore(filename string) error {
 	// Restore the db
 	// Start by wiping everything
 	if err := db.WipeEverything(); err != nil {
-		return fmt.Errorf("could not wipe database: %w", err)
+		return fmt.Errorf("could not wipe database: %s", err)
 	}
 	log.Info("Wiped database.")
 
@@ -110,57 +129,36 @@ func Restore(filename string) error {
 	migrations := dbfiles["migration"]
 	rc, err := migrations.Open()
 	if err != nil {
-		return fmt.Errorf("could not open migrations: %w", err)
+		return fmt.Errorf("could not open migrations: %s", err)
 	}
 	defer rc.Close()
 
 	var buf bytes.Buffer
 	if _, err := buf.ReadFrom(rc); err != nil {
-		return fmt.Errorf("could not read migrations: %w", err)
+		return fmt.Errorf("could not read migrations: %s", err)
 	}
 
 	ms := []*xormigrate.Migration{}
 	if err := json.Unmarshal(buf.Bytes(), &ms); err != nil {
-		return fmt.Errorf("could not read migrations: %w", err)
+		return fmt.Errorf("could not read migrations: %s", err)
 	}
 	sort.Slice(ms, func(i, j int) bool {
-		return ms[i].ID < ms[j].ID
+		return ms[i].ID > ms[j].ID
 	})
 
-	lastMigration := ms[len(ms)-2]
-	log.Debugf("Last migration: %s", lastMigration.ID)
+	lastMigration := ms[len(ms)-1]
 	if err := migration.MigrateTo(lastMigration.ID, nil); err != nil {
-		return fmt.Errorf("could not create db structure: %w", err)
+		return fmt.Errorf("could not create db structure: %s", err)
 	}
-
-	delete(dbfiles, "migration")
 
 	// Restore all db data
 	for table, d := range dbfiles {
 		content, err := unmarshalFileToJSON(d)
 		if err != nil {
-			return fmt.Errorf("could not read table %s: %w", table, err)
+			return fmt.Errorf("could not read table %s: %s", table, err)
 		}
-
-		// FIXME: There has to be a general way to do this but this works for now.
-		if table == "notifications" {
-			for i := range content {
-				var decoded []byte
-				decoded, err = base64.StdEncoding.DecodeString(content[i]["notification"].(string))
-				if err != nil && !errors.Is(err, base64.CorruptInputError(0)) {
-					return fmt.Errorf("could not decode notification %s: %w", content[i]["notification"], err)
-				}
-
-				if err != nil && errors.Is(err, base64.CorruptInputError(0)) {
-					decoded = []byte(content[i]["notification"].(string))
-				}
-
-				content[i]["notification"] = string(decoded)
-			}
-		}
-
 		if err := db.Restore(table, content); err != nil {
-			return fmt.Errorf("could not restore table data for table %s: %w", table, err)
+			return fmt.Errorf("could not restore table data for table %s: %s", table, err)
 		}
 		log.Infof("Restored table %s", table)
 	}
@@ -174,18 +172,18 @@ func Restore(filename string) error {
 	for i, file := range filesFiles {
 		id, err := strconv.ParseInt(i, 10, 64)
 		if err != nil {
-			return fmt.Errorf("could not parse file id %s: %w", i, err)
+			return fmt.Errorf("could not parse file id %s: %s", i, err)
 		}
 
 		f := &files.File{ID: id}
 
 		fc, err := file.Open()
 		if err != nil {
-			return fmt.Errorf("could not open file %s: %w", i, err)
+			return fmt.Errorf("could not open file %s: %s", i, err)
 		}
 
 		if err := f.Save(fc); err != nil {
-			return fmt.Errorf("could not save file: %w", err)
+			return fmt.Errorf("could not save file: %s", err)
 		}
 
 		_ = fc.Close()
@@ -196,7 +194,6 @@ func Restore(filename string) error {
 	///////
 	// Done
 	log.Infof("Done restoring dump.")
-	log.Infof("Restart Vikunja to make sure the new configuration file is applied.")
 
 	return nil
 }
@@ -218,63 +215,4 @@ func unmarshalFileToJSON(file *zip.File) (contents []map[string]interface{}, err
 		return nil, err
 	}
 	return
-}
-
-func restoreConfig(configFile, dotEnvFile *zip.File) error {
-	if configFile != nil {
-		if configFile.UncompressedSize64 > maxConfigSize {
-			return fmt.Errorf("config file too large, is %d, max size is %d", configFile.UncompressedSize64, maxConfigSize)
-		}
-
-		outFile, err := os.OpenFile(configFile.Name, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, configFile.Mode())
-		if err != nil {
-			return fmt.Errorf("could not open config file for writing: %w", err)
-		}
-
-		cfgr, err := configFile.Open()
-		if err != nil {
-			return err
-		}
-
-		// #nosec - We eliminated the potential decompression bomb by erroring out above if the file is larger than a threshold.
-		_, err = io.Copy(outFile, cfgr)
-		if err != nil {
-			return fmt.Errorf("could not create config file: %w", err)
-		}
-
-		_ = cfgr.Close()
-		_ = outFile.Close()
-
-		log.Infof("The config file has been restored to '%s'.", configFile.Name)
-		log.Infof("You can now make changes to it, hit enter when you're done.")
-		if _, err := bufio.NewReader(os.Stdin).ReadString('\n'); err != nil {
-			return fmt.Errorf("could not read from stdin: %w", err)
-		}
-
-		return nil
-	}
-
-	log.Warning("No config file found, not restoring one.")
-	log.Warning("You'll likely have had Vikunja configured through environment variables.")
-
-	if dotEnvFile != nil {
-		dotenv, err := dotEnvFile.Open()
-		if err != nil {
-			return err
-		}
-		buf := bytes.Buffer{}
-		_, err = buf.ReadFrom(dotenv)
-		if err != nil {
-			return err
-		}
-
-		log.Warningf("Please make sure the following settings are properly configured in your instance:\n%s", buf.String())
-		log.Warning("Make sure your current config matches the following env variables, confirm by pressing enter when done.")
-		log.Warning("If your config does not match, you'll have to make the changes and restart the restoring process afterwards.")
-		if _, err := bufio.NewReader(os.Stdin).ReadString('\n'); err != nil {
-			return fmt.Errorf("could not read from stdin: %w", err)
-		}
-	}
-
-	return nil
 }

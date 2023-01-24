@@ -17,36 +17,24 @@
 package handler
 
 import (
-	_ "image/gif"  // To make sure the decoder used for generating blurHashes recognizes gifs
-	_ "image/jpeg" // To make sure the decoder used for generating blurHashes recognizes jpgs
-	_ "image/png"  // To make sure the decoder used for generating blurHashes recognizes pngs
-
-	_ "golang.org/x/image/bmp"  // To make sure the decoder used for generating blurHashes recognizes bmps
-	_ "golang.org/x/image/tiff" // To make sure the decoder used for generating blurHashes recognizes tiffs
-	_ "golang.org/x/image/webp" // To make sure the decoder used for generating blurHashes recognizes tiffs
-
-	"image"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"code.vikunja.io/api/pkg/db"
+	"xorm.io/xorm"
+
 	"code.vikunja.io/api/pkg/files"
 	"code.vikunja.io/api/pkg/log"
 	"code.vikunja.io/api/pkg/models"
 	auth2 "code.vikunja.io/api/pkg/modules/auth"
 	"code.vikunja.io/api/pkg/modules/background"
 	"code.vikunja.io/api/pkg/modules/background/unsplash"
-	"code.vikunja.io/api/pkg/modules/background/upload"
 	"code.vikunja.io/web"
 	"code.vikunja.io/web/handler"
-
-	"github.com/bbrks/go-blurhash"
 	"github.com/gabriel-vasile/mimetype"
 	"github.com/labstack/echo/v4"
-	"golang.org/x/image/draw"
-	"xorm.io/xorm"
 )
 
 // BackgroundProvider represents a thing which holds a background provider
@@ -146,18 +134,6 @@ func (bp *BackgroundProvider) SetBackground(c echo.Context) error {
 	return c.JSON(http.StatusOK, list)
 }
 
-func CreateBlurHash(srcf io.Reader) (hash string, err error) {
-	src, _, err := image.Decode(srcf)
-	if err != nil {
-		return "", err
-	}
-
-	dst := image.NewRGBA(image.Rect(0, 0, 32, 32))
-	draw.NearestNeighbor.Scale(dst, dst.Rect, src, src.Bounds(), draw.Over, nil)
-
-	return blurhash.Encode(4, 3, dst)
-}
-
 // UploadBackground uploads a background and passes the id of the uploaded file as an Image to the Set function of the BackgroundProvider.
 func (bp *BackgroundProvider) UploadBackground(c echo.Context) error {
 	s := db.NewSession()
@@ -169,21 +145,23 @@ func (bp *BackgroundProvider) UploadBackground(c echo.Context) error {
 		return handler.HandleHTTPError(err, c)
 	}
 
+	p := bp.Provider()
+
 	// Get + upload the image
 	file, err := c.FormFile("background")
 	if err != nil {
 		_ = s.Rollback()
 		return err
 	}
-	srcf, err := file.Open()
+	src, err := file.Open()
 	if err != nil {
 		_ = s.Rollback()
 		return err
 	}
-	defer srcf.Close()
+	defer src.Close()
 
 	// Validate we're dealing with an image
-	mime, err := mimetype.DetectReader(srcf)
+	mime, err := mimetype.DetectReader(src)
 	if err != nil {
 		_ = s.Rollback()
 		return handler.HandleHTTPError(err, c)
@@ -192,8 +170,10 @@ func (bp *BackgroundProvider) UploadBackground(c echo.Context) error {
 		_ = s.Rollback()
 		return c.JSON(http.StatusBadRequest, models.Message{Message: "Uploaded file is no image."})
 	}
+	_, _ = src.Seek(0, io.SeekStart)
 
-	err = SaveBackgroundFile(s, auth, list, srcf, file.Filename, uint64(file.Size))
+	// Save the file
+	f, err := files.CreateWithMime(src, file.Filename, uint64(file.Size), auth, mime.String())
 	if err != nil {
 		_ = s.Rollback()
 		if files.IsErrFileIsTooLarge(err) {
@@ -203,33 +183,20 @@ func (bp *BackgroundProvider) UploadBackground(c echo.Context) error {
 		return handler.HandleHTTPError(err, c)
 	}
 
+	image := &background.Image{ID: strconv.FormatInt(f.ID, 10)}
+
+	err = p.Set(s, image, list, auth)
+	if err != nil {
+		_ = s.Rollback()
+		return handler.HandleHTTPError(err, c)
+	}
+
 	if err := s.Commit(); err != nil {
 		_ = s.Rollback()
 		return handler.HandleHTTPError(err, c)
 	}
 
 	return c.JSON(http.StatusOK, list)
-}
-
-func SaveBackgroundFile(s *xorm.Session, auth web.Auth, list *models.List, srcf io.ReadSeeker, filename string, filesize uint64) (err error) {
-	_, _ = srcf.Seek(0, io.SeekStart)
-	f, err := files.Create(srcf, filename, filesize, auth)
-	if err != nil {
-		return err
-	}
-
-	// Generate a blurHash
-	_, _ = srcf.Seek(0, io.SeekStart)
-	list.BackgroundBlurHash, err = CreateBlurHash(srcf)
-	if err != nil {
-		return err
-	}
-
-	// Save it
-	p := upload.Provider{}
-	img := &background.Image{ID: strconv.FormatInt(f.ID, 10)}
-	err = p.Set(s, img, list, auth)
-	return err
 }
 
 func checkListBackgroundRights(s *xorm.Session, c echo.Context) (list *models.List, auth web.Auth, err error) {
@@ -333,8 +300,7 @@ func RemoveListBackground(c echo.Context) error {
 
 	list.BackgroundFileID = 0
 	list.BackgroundInformation = nil
-	list.BackgroundBlurHash = ""
-	err = models.UpdateList(s, list, auth, true)
+	err = list.Update(s, auth)
 	if err != nil {
 		return err
 	}

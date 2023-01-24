@@ -22,12 +22,10 @@ import (
 	"strings"
 	"time"
 
-	"code.vikunja.io/api/pkg/db"
-
 	"code.vikunja.io/api/pkg/events"
+
 	"code.vikunja.io/api/pkg/log"
 	"code.vikunja.io/api/pkg/user"
-
 	"code.vikunja.io/web"
 	"xorm.io/builder"
 	"xorm.io/xorm"
@@ -187,22 +185,12 @@ type NamespaceWithLists struct {
 	Lists     []*List `xorm:"-" json:"lists"`
 }
 
-type NamespaceWithListsAndTasks struct {
-	Namespace
-	Lists []*ListWithTasksAndBuckets `xorm:"-" json:"lists"`
-}
-
 func makeNamespaceSlice(namespaces map[int64]*NamespaceWithLists, userMap map[int64]*user.User, subscriptions map[int64]*Subscription) []*NamespaceWithLists {
 	all := make([]*NamespaceWithLists, 0, len(namespaces))
 	for _, n := range namespaces {
 		n.Owner = userMap[n.OwnerID]
 		n.Subscription = subscriptions[n.ID]
 		all = append(all, n)
-		for _, l := range n.Lists {
-			if n.Subscription != nil && l.Subscription == nil {
-				l.Subscription = n.Subscription
-			}
-		}
 	}
 	sort.Slice(all, func(i, j int) bool {
 		return all[i].ID < all[j].ID
@@ -212,7 +200,7 @@ func makeNamespaceSlice(namespaces map[int64]*NamespaceWithLists, userMap map[in
 }
 
 func getNamespaceFilterCond(search string) (filterCond builder.Cond) {
-	filterCond = db.ILIKE("namespaces.title", search)
+	filterCond = &builder.Like{"namespaces.title", "%" + search + "%"}
 
 	if search == "" {
 		return
@@ -303,11 +291,6 @@ func getNamespaceOwnerIDs(namespaces map[int64]*NamespaceWithLists) (namespaceID
 }
 
 func getNamespaceSubscriptions(s *xorm.Session, namespaceIDs []int64, userID int64) (map[int64]*Subscription, error) {
-	subscriptionsMap := make(map[int64]*Subscription)
-	if len(namespaceIDs) == 0 {
-		return subscriptionsMap, nil
-	}
-
 	subscriptions := []*Subscription{}
 	err := s.
 		Where("entity_type = ? AND user_id = ?", SubscriptionEntityNamespace, userID).
@@ -316,6 +299,7 @@ func getNamespaceSubscriptions(s *xorm.Session, namespaceIDs []int64, userID int
 	if err != nil {
 		return nil, err
 	}
+	subscriptionsMap := make(map[int64]*Subscription)
 	for _, sub := range subscriptions {
 		sub.Entity = sub.EntityType.String()
 		subscriptionsMap[sub.EntityID] = sub
@@ -327,7 +311,6 @@ func getNamespaceSubscriptions(s *xorm.Session, namespaceIDs []int64, userID int
 func getListsForNamespaces(s *xorm.Session, namespaceIDs []int64, archived bool) ([]*List, error) {
 	lists := []*List{}
 	listQuery := s.
-		OrderBy("position").
 		In("namespace_id", namespaceIDs)
 
 	if !archived {
@@ -340,7 +323,7 @@ func getListsForNamespaces(s *xorm.Session, namespaceIDs []int64, archived bool)
 func getSharedListsInNamespace(s *xorm.Session, archived bool, doer *user.User) (sharedListsNamespace *NamespaceWithLists, err error) {
 	// Create our pseudo namespace to hold the shared lists
 	sharedListsPseudonamespace := SharedListsPseudoNamespace
-	sharedListsPseudonamespace.OwnerID = doer.ID
+	sharedListsPseudonamespace.Owner = doer
 	sharedListsNamespace = &NamespaceWithLists{
 		sharedListsPseudonamespace,
 		[]*List{},
@@ -390,13 +373,12 @@ func getSharedListsInNamespace(s *xorm.Session, archived bool, doer *user.User) 
 func getFavoriteLists(s *xorm.Session, lists []*List, namespaceIDs []int64, doer *user.User) (favoriteNamespace *NamespaceWithLists, err error) {
 	// Create our pseudo namespace with favorite lists
 	pseudoFavoriteNamespace := FavoritesPseudoNamespace
-	pseudoFavoriteNamespace.OwnerID = doer.ID
+	pseudoFavoriteNamespace.Owner = doer
 	favoriteNamespace = &NamespaceWithLists{
 		Namespace: pseudoFavoriteNamespace,
 		Lists:     []*List{{}},
 	}
 	*favoriteNamespace.Lists[0] = FavoritesPseudoList // Copying the list to be able to modify it later
-	favoriteNamespace.Lists[0].Owner = doer
 
 	for _, list := range lists {
 		if !list.IsFavorite {
@@ -406,21 +388,12 @@ func getFavoriteLists(s *xorm.Session, lists []*List, namespaceIDs []int64, doer
 	}
 
 	// Check if we have any favorites or favorited lists and remove the favorites namespace from the list if not
-	cond := builder.
-		Select("tasks.id").
-		From("tasks").
-		Join("INNER", "lists", "tasks.list_id = lists.id").
-		Join("INNER", "namespaces", "lists.namespace_id = namespaces.id").
-		Where(builder.In("namespaces.id", namespaceIDs))
-
 	var favoriteCount int64
 	favoriteCount, err = s.
-		Where(builder.And(
-			builder.Eq{"user_id": doer.ID},
-			builder.Eq{"kind": FavoriteKindTask},
-			builder.In("entity_id", cond),
-		)).
-		Count(&Favorite{})
+		Join("INNER", "lists", "tasks.list_id = lists.id").
+		Join("INNER", "namespaces", "lists.namespace_id = namespaces.id").
+		Where(builder.And(builder.Eq{"tasks.is_favorite": true}, builder.In("namespaces.id", namespaceIDs))).
+		Count(&Task{})
 	if err != nil {
 		return
 	}
@@ -454,7 +427,7 @@ func getSavedFilters(s *xorm.Session, doer *user.User) (savedFiltersNamespace *N
 	}
 
 	savedFiltersPseudoNamespace := SavedFiltersPseudoNamespace
-	savedFiltersPseudoNamespace.OwnerID = doer.ID
+	savedFiltersPseudoNamespace.Owner = doer
 	savedFiltersNamespace = &NamespaceWithLists{
 		Namespace: savedFiltersPseudoNamespace,
 		Lists:     make([]*List, 0, len(savedFilters)),
@@ -485,7 +458,6 @@ func getSavedFilters(s *xorm.Session, doer *user.User) (savedFiltersNamespace *N
 // @Success 200 {array} models.NamespaceWithLists "The Namespaces."
 // @Failure 500 {object} models.Message "Internal error"
 // @Router /namespaces [get]
-//
 //nolint:gocyclo
 func (n *Namespace) ReadAll(s *xorm.Session, a web.Auth, search string, page int, perPage int) (result interface{}, resultCount int, numberOfTotalItems int64, err error) {
 	if _, is := a.(*LinkSharing); is {
@@ -511,10 +483,6 @@ func (n *Namespace) ReadAll(s *xorm.Session, a web.Auth, search string, page int
 
 	namespaceIDs, ownerIDs := getNamespaceOwnerIDs(namespaces)
 
-	if len(namespaceIDs) == 0 {
-		return nil, 0, 0, nil
-	}
-
 	subscriptionsMap, err := getNamespaceSubscriptions(s, namespaceIDs, doer.ID)
 	if err != nil {
 		return nil, 0, 0, err
@@ -524,7 +492,6 @@ func (n *Namespace) ReadAll(s *xorm.Session, a web.Auth, search string, page int
 	if err != nil {
 		return nil, 0, 0, err
 	}
-	ownerMap[doer.ID] = doer
 
 	if n.NamespacesOnly {
 		all := makeNamespaceSlice(namespaces, ownerMap, subscriptionsMap)
@@ -564,13 +531,6 @@ func (n *Namespace) ReadAll(s *xorm.Session, a web.Auth, search string, page int
 	}
 
 	/////////////////
-	// Add list details (favorite state, among other things)
-	err = addListDetails(s, lists, a)
-	if err != nil {
-		return
-	}
-
-	/////////////////
 	// Favorite lists
 
 	favoritesNamespace, err := getFavoriteLists(s, lists, namespaceIDs, doer)
@@ -584,6 +544,11 @@ func (n *Namespace) ReadAll(s *xorm.Session, a web.Auth, search string, page int
 
 	//////////////////////
 	// Put it all together
+
+	err = addListDetails(s, lists)
+	if err != nil {
+		return
+	}
 
 	for _, list := range lists {
 		if list.NamespaceID == SharedListsPseudoNamespace.ID || list.NamespaceID == SavedFiltersPseudoNamespace.ID {
@@ -605,23 +570,26 @@ func (n *Namespace) ReadAll(s *xorm.Session, a web.Auth, search string, page int
 // @Produce json
 // @Security JWTKeyAuth
 // @Param namespace body models.Namespace true "The namespace you want to create."
-// @Success 201 {object} models.Namespace "The created namespace."
+// @Success 200 {object} models.Namespace "The created namespace."
 // @Failure 400 {object} web.HTTPError "Invalid namespace object provided."
 // @Failure 403 {object} web.HTTPError "The user does not have access to the namespace"
 // @Failure 500 {object} models.Message "Internal error"
 // @Router /namespaces [put]
 func (n *Namespace) Create(s *xorm.Session, a web.Auth) (err error) {
-	// Check if we have at least a title
+	// Check if we have at least a name
 	if n.Title == "" {
 		return ErrNamespaceNameCannotBeEmpty{NamespaceID: 0, UserID: a.GetID()}
 	}
+	n.ID = 0 // This would otherwise prevent the creation of new lists after one was created
 
+	// Check if the User exists
 	n.Owner, err = user.GetUserByID(s, a.GetID())
 	if err != nil {
 		return
 	}
 	n.OwnerID = n.Owner.ID
 
+	// Insert
 	if _, err = s.Insert(n); err != nil {
 		return err
 	}
@@ -660,10 +628,7 @@ func CreateNewNamespaceForUser(s *xorm.Session, user *user.User) (err error) {
 // @Failure 500 {object} models.Message "Internal error"
 // @Router /namespaces/{id} [delete]
 func (n *Namespace) Delete(s *xorm.Session, a web.Auth) (err error) {
-	return deleteNamespace(s, n, a, true)
-}
 
-func deleteNamespace(s *xorm.Session, n *Namespace, a web.Auth, withLists bool) (err error) {
 	// Check if the namespace exists
 	_, err = GetNamespaceByID(s, n.ID)
 	if err != nil {
@@ -676,15 +641,6 @@ func deleteNamespace(s *xorm.Session, n *Namespace, a web.Auth, withLists bool) 
 		return
 	}
 
-	namespaceDeleted := &NamespaceDeletedEvent{
-		Namespace: n,
-		Doer:      a,
-	}
-
-	if !withLists {
-		return events.Dispatch(namespaceDeleted)
-	}
-
 	// Delete all lists with their tasks
 	lists, err := GetListsByNamespaceID(s, n.ID, &user.User{})
 	if err != nil {
@@ -692,18 +648,43 @@ func deleteNamespace(s *xorm.Session, n *Namespace, a web.Auth, withLists bool) 
 	}
 
 	if len(lists) == 0 {
-		return events.Dispatch(namespaceDeleted)
+		return events.Dispatch(&NamespaceDeletedEvent{
+			Namespace: n,
+			Doer:      a,
+		})
 	}
 
-	// Looping over all lists to let the list handle properly cleaning up the tasks and everything else associated with it.
-	for _, list := range lists {
-		err = list.Delete(s, a)
-		if err != nil {
-			return err
-		}
+	var listIDs []int64
+	// We need to do that for here because we need the list ids to delete two times:
+	// 1) to delete the lists itself
+	// 2) to delete the list tasks
+	for _, l := range lists {
+		listIDs = append(listIDs, l.ID)
 	}
 
-	return events.Dispatch(namespaceDeleted)
+	if len(listIDs) == 0 {
+		return events.Dispatch(&NamespaceDeletedEvent{
+			Namespace: n,
+			Doer:      a,
+		})
+	}
+
+	// Delete tasks
+	_, err = s.In("list_id", listIDs).Delete(&Task{})
+	if err != nil {
+		return
+	}
+
+	// Delete the lists
+	_, err = s.In("id", listIDs).Delete(&List{})
+	if err != nil {
+		return
+	}
+
+	return events.Dispatch(&NamespaceDeletedEvent{
+		Namespace: n,
+		Doer:      a,
+	})
 }
 
 // Update implements the update method via the interface

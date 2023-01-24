@@ -23,8 +23,6 @@ import (
 
 	"code.vikunja.io/api/pkg/config"
 	"code.vikunja.io/api/pkg/db"
-	"code.vikunja.io/api/pkg/log"
-
 	"github.com/labstack/echo/v4"
 )
 
@@ -54,22 +52,14 @@ func HandleTesting(c echo.Context) error {
 	content := []map[string]interface{}{}
 	err := json.Unmarshal(buf.Bytes(), &content)
 	if err != nil {
-		log.Errorf("Error replacing table data: %v", err)
 		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
 			"error":   true,
 			"message": err.Error(),
 		})
 	}
 
-	truncate := c.QueryParam("truncate")
-	if truncate == "true" || truncate == "" {
-		err = db.RestoreAndTruncate(table, content)
-	} else {
-		err = db.Restore(table, content)
-	}
-
+	err = db.RestoreAndTruncate(table, content)
 	if err != nil {
-		log.Errorf("Error replacing table data: %v", err)
 		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
 			"error":   true,
 			"message": err.Error(),

@@ -4,8 +4,8 @@ title: "Errors"
 draft: false
 type: "doc"
 menu:
-sidebar:
-parent: "usage"
+  sidebar:
+    parent: "usage"
 ---
 
 # Errors
@@ -40,8 +40,6 @@ This document describes the different errors Vikunja can return.
 | 1016 | 412 | Totp is not enabled for this user. |
 | 1017 | 412 | The provided Totp passcode is invalid. |
 | 1018 | 412 | The provided user avatar provider type setting is invalid. |
-| 1019 | 412 | No openid email address was provided. |
-| 1020 | 412 | This user account is disabled. |
 
 ## Validation
 
@@ -52,16 +50,14 @@ This document describes the different errors Vikunja can return.
 
 ## List
 
-| ErrorCode | HTTP Status Code | Description                                                                                                                   |
-|-----------|------------------|-------------------------------------------------------------------------------------------------------------------------------|
-| 3001      | 404 | The list does not exist.                                                                                                      |
-| 3004      | 403 | The user needs to have read permissions on that list to perform that action.                                                  |
-| 3005      | 400 | The list title cannot be empty.                                                                                               |
-| 3006      | 404 | The list share does not exist.                                                                                                |
-| 3007      | 400 | A list with this identifier already exists.                                                                                   |
-| 3008      | 412 | The list is archived and can therefore only be accessed read only. This is also true for all tasks associated with this list. |
-| 3009      | 412 | The list cannot belong to a dynamically generated namespace like "Favorites".                                                 |
-| 3010      | 412 | The list must belong to a namespace.                                                                                          |
+| ErrorCode | HTTP Status Code | Description |
+|-----------|------------------|-------------|
+| 3001 | 404 | The list does not exist. |
+| 3004 | 403 | The user needs to have read permissions on that list to perform that action. |
+| 3005 | 400 | The list title cannot be empty. |
+| 3006 | 404 | The list share does not exist. |
+| 3007 | 400 | A list with this identifier already exists. |
+| 3008 | 412 | The list is archived and can therefore only be accessed read only. This is also true for all tasks associated with this list. |
 
 ## Task
 
@@ -82,12 +78,10 @@ This document describes the different errors Vikunja can return.
 | 4013 | 400 | The task sort param is invalid. |
 | 4014 | 400 | The task sort order is invalid. |
 | 4015 | 404 | The task comment does not exist. |
-| 4016 | 400 | Invalid task field. |
-| 4017 | 400 | Invalid task filter comparator. |
-| 4018 | 400 | Invalid task filter concatinator. |
-| 4019 | 400 | Invalid task filter value. |
-| 4020 | 400 | The provided attachment does not belong to that task. |
-| 4021 | 400 | This user is already assigned to that task. |
+| 4016 | 403 | Invalid task field. |
+| 4017 | 403 | Invalid task filter comparator. |
+| 4018 | 403 | Invalid task filter concatinator. |
+| 4019 | 403 | Invalid task filter value. |
 
 ## Namespace
 

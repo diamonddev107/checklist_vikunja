@@ -19,14 +19,12 @@ package models
 import (
 	"time"
 
-	"code.vikunja.io/api/pkg/db"
-
 	"code.vikunja.io/api/pkg/events"
+
+	"xorm.io/xorm"
+
 	"code.vikunja.io/api/pkg/user"
 	"code.vikunja.io/web"
-
-	"xorm.io/builder"
-	"xorm.io/xorm"
 )
 
 // TaskComment represents a task comment
@@ -58,7 +56,7 @@ func (tc *TaskComment) TableName() string {
 // @Security JWTKeyAuth
 // @Param relation body models.TaskComment true "The task comment object"
 // @Param taskID path int true "Task ID"
-// @Success 201 {object} models.TaskComment "The created task comment object."
+// @Success 200 {object} models.TaskComment "The created task comment object."
 // @Failure 400 {object} web.HTTPError "Invalid task comment object provided."
 // @Failure 500 {object} models.Message "Internal error"
 // @Router /tasks/{taskID}/comments [put]
@@ -134,39 +132,7 @@ func (tc *TaskComment) Update(s *xorm.Session, a web.Auth) error {
 	if updated == 0 {
 		return ErrTaskCommentDoesNotExist{ID: tc.ID}
 	}
-
-	if err != nil {
-		return err
-	}
-
-	task, err := GetTaskSimple(s, &Task{ID: tc.TaskID})
-	if err != nil {
-		return err
-	}
-
-	return events.Dispatch(&TaskCommentUpdatedEvent{
-		Task:    &task,
-		Comment: tc,
-		Doer:    tc.Author,
-	})
-}
-
-func getTaskCommentSimple(s *xorm.Session, tc *TaskComment) error {
-	exists, err := s.
-		Where("id = ? and task_id = ?", tc.ID, tc.TaskID).
-		NoAutoCondition().
-		Get(tc)
-	if err != nil {
-		return err
-	}
-	if !exists {
-		return ErrTaskCommentDoesNotExist{
-			ID:     tc.ID,
-			TaskID: tc.TaskID,
-		}
-	}
-
-	return nil
+	return err
 }
 
 // ReadOne handles getting a single comment
@@ -184,9 +150,15 @@ func getTaskCommentSimple(s *xorm.Session, tc *TaskComment) error {
 // @Failure 500 {object} models.Message "Internal error"
 // @Router /tasks/{taskID}/comments/{commentID} [get]
 func (tc *TaskComment) ReadOne(s *xorm.Session, a web.Auth) (err error) {
-	err = getTaskCommentSimple(s, tc)
+	exists, err := s.Get(tc)
 	if err != nil {
-		return err
+		return
+	}
+	if !exists {
+		return ErrTaskCommentDoesNotExist{
+			ID:     tc.ID,
+			TaskID: tc.TaskID,
+		}
 	}
 
 	// Get the author
@@ -228,12 +200,10 @@ func (tc *TaskComment) ReadAll(s *xorm.Session, auth web.Auth, search string, pa
 	}
 
 	limit, start := getLimitFromPageIndex(page, perPage)
+
 	comments := []*TaskComment{}
 	query := s.
-		Where(builder.And(
-			builder.Eq{"task_id": tc.TaskID},
-			db.ILIKE("comment", search),
-		)).
+		Where("task_id = ? AND comment like ?", tc.TaskID, "%"+search+"%").
 		Join("LEFT", "users", "users.id = task_comments.author_id")
 	if limit > 0 {
 		query = query.Limit(limit, start)

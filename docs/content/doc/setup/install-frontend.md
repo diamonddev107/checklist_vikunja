@@ -35,7 +35,7 @@ Just open the file with a text editor - there are comments which will explain ho
 
 ## Docker
 
-The docker image is based on nginx and just contains all necessary files for the frontend.
+The docker image is based on nginx and just contains all nessecary files for the frontend.
 
 To run it, all you need is
 
@@ -122,7 +122,7 @@ Put the following config in `cat /etc/apache2/sites-available/vikunja.conf`:
     ServerName localhost
     DocumentRoot /path/to/vikunja/static/frontend/files
     RewriteEngine On
- 	RewriteRule ^\/?(favicon\.ico|assets|audio|fonts|images|manifest\.webmanifest|robots\.txt|sw\.js|workbox-.*|api|dav|\.well-known) - [L]
+    RewriteRule ^\/?(config\.json|favicon\.ico|css|fonts|images|img|js) - [L]
     RewriteRule ^(.*)$ /index.html [QSA,L]
 </VirtualHost>
 {{< /highlight >}}

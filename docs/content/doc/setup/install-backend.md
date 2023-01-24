@@ -28,7 +28,7 @@ wget <download-url>
 ### Verify the GPG signature
 
 Starting with version `0.7`, all releases are signed using pgp.
-Releases from `main` will always be signed.
+Releases from `master` will always be signed.
 
 To validate the downloaded zip file use the signiture file `.asc` and the key `FF054DACD908493A`:
 
@@ -52,7 +52,7 @@ ln -s /opt/vikunja/vikunja /usr/bin/vikunja
 
 ### Systemd service
 
-Save the following service file to `/etc/systemd/system/vikunja.service` and adapt it to your needs:
+Take the following `service` file and adapt it to your needs:
 
 {{< highlight service >}}
 [Unit]
@@ -83,7 +83,9 @@ WantedBy=multi-user.target
 
 If you've installed Vikunja to a directory other than `/opt/vikunja`, you need to adapt `WorkingDirectory` accordingly.
 
-After you made all necessary modifications, it's time to start the service:
+Save the file to `/etc/systemd/system/vikunja.service`
+
+After you made all nessecary modifications, it's time to start the service:
 
 {{< highlight bash >}}
 sudo systemctl enable vikunja
@@ -97,7 +99,7 @@ To build vikunja from source, see [building from source]({{< ref "build-from-sou
 ### Updating
 
 Simply replace the binary and templates with the new version, then restart Vikunja.
-It will automatically run all necessary database migrations.
+It will automatically run all nessecary database migrations.
 **Make sure to take a look at the changelog for the new version to not miss any manual steps the update may involve!**
 
 ## Docker
@@ -145,11 +147,10 @@ services:
     image: vikunja/api:latest
     environment:
       VIKUNJA_DATABASE_HOST: db
-      VIKUNJA_DATABASE_PASSWORD: secret
+      VIKUNJA_DATABASE_PASSWORD: supersecret
       VIKUNJA_DATABASE_TYPE: mysql
-      VIKUNJA_DATABASE_USER: vikunja
+      VIKUNJA_DATABASE_USER: root
       VIKUNJA_SERVICE_JWTSECRET: <generated secret>
-      VIKUNJA_SERVICE_FRONTENDURL: https://<your public frontend url with slash>/
     volumes:
       - ./files:/app/vikunja/files
   db:
@@ -157,8 +158,6 @@ services:
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     environment:
       MYSQL_ROOT_PASSWORD: supersecret
-      MYSQL_USER: vikunja
-      MYSQL_PASSWORD: secret
       MYSQL_DATABASE: vikunja
     volumes:
       - ./db:/var/lib/mysql
@@ -276,8 +275,3 @@ The API is now available through IP:
 ## Configuration
 
 See [available configuration options]({{< ref "config.md">}}).
-
-## Default Password
-
-After successfully installing Vikunja, there is no default user or password.
-You only need to register a new account and set all the details when creating it.

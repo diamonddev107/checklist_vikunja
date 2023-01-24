@@ -17,17 +17,12 @@
 package files
 
 import (
-	"errors"
 	"io"
-	"os"
 	"strconv"
 	"time"
 
-	"xorm.io/xorm"
-
 	"code.vikunja.io/api/pkg/config"
 	"code.vikunja.io/api/pkg/db"
-	"code.vikunja.io/api/pkg/log"
 	"code.vikunja.io/web"
 	"github.com/c2h5oh/datasize"
 	"github.com/spf13/afero"
@@ -80,25 +75,14 @@ func Create(f io.Reader, realname string, realsize uint64, a web.Auth) (file *Fi
 
 // CreateWithMime creates a new file from an FileHeader and sets its mime type
 func CreateWithMime(f io.Reader, realname string, realsize uint64, a web.Auth, mime string) (file *File, err error) {
-	s := db.NewSession()
-	defer s.Close()
 
-	file, err = CreateWithMimeAndSession(s, f, realname, realsize, a, mime, true)
-	if err != nil {
-		_ = s.Rollback()
-		return
-	}
-	return
-}
-
-func CreateWithMimeAndSession(s *xorm.Session, f io.Reader, realname string, realsize uint64, a web.Auth, mime string, checkFileSizeLimit bool) (file *File, err error) {
 	// Get and parse the configured file size
 	var maxSize datasize.ByteSize
 	err = maxSize.UnmarshalText([]byte(config.FilesMaxSize.GetString()))
 	if err != nil {
 		return nil, err
 	}
-	if realsize > maxSize.Bytes() && checkFileSizeLimit {
+	if realsize > maxSize.Bytes() {
 		return nil, ErrFileIsTooLarge{Size: realsize}
 	}
 
@@ -110,13 +94,21 @@ func CreateWithMimeAndSession(s *xorm.Session, f io.Reader, realname string, rea
 		Mime:        mime,
 	}
 
+	s := db.NewSession()
+	defer s.Close()
+
 	_, err = s.Insert(file)
 	if err != nil {
+		_ = s.Rollback()
 		return
 	}
 
 	// Save the file to storage with its new ID as path
 	err = file.Save(f)
+	if err != nil {
+		_ = s.Rollback()
+		return
+	}
 	return
 }
 
@@ -137,17 +129,9 @@ func (f *File) Delete() (err error) {
 
 	err = afs.Remove(f.getFileName())
 	if err != nil {
-		var perr *os.PathError
-		if errors.As(err, &perr) {
-			// Don't fail when removing the file failed
-			log.Errorf("Error deleting file %d: %w", err)
-			return s.Commit()
-		}
-
 		_ = s.Rollback()
 		return err
 	}
-
 	return
 }
 

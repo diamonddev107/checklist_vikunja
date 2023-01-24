@@ -11,9 +11,9 @@ menu:
 # Mage
 
 Vikunja uses [Mage](https://magefile.org/) to script common development tasks and even releasing.
-Mage is a pure go solution which allows for greater flexibility and things like better parallelization.
+Mage is a pure go solution which allows for greater flexibility and things like better paralelization.
 
-This document explains what tasks are available and what they do.
+This document explains what taks are available and what they do.
 
 {{< table_of_contents >}}
 
@@ -39,7 +39,7 @@ There are multiple categories of subcommands in the magefile:
 
 ## CI
 
-These tasks are automatically run in our CI every time someone pushes to main or you update a pull request:
+These tasks are automatically run in our CI every time someone pushes to master or you update a pull request:
 
 * `mage check:lint`
 * `mage check:fmt`
@@ -57,13 +57,15 @@ These tasks are automatically run in our CI every time someone pushes to main or
 mage build:build
 {{< /highlight >}}
 
-or
+Builds a `vikunja`-binary in the root directory of the repo for the platform it is run on.
+
+### Statically compile all templates into the binary
 
 {{< highlight bash >}}
-mage build
+mage build:generate
 {{< /highlight >}}
 
-Builds a `vikunja`-binary in the root directory of the repo for the platform it is run on.
+This generates static code with all templates, meaning no template need to be referenced at runtime.
 
 ### clean
 
@@ -71,7 +73,7 @@ Builds a `vikunja`-binary in the root directory of the repo for the platform it 
 mage build:clean
 {{< /highlight >}}
 
-Cleans all build and executable files
+Cleans all build, executable and bindata files
 
 ## Check
 
@@ -170,8 +172,6 @@ mage dev:create-migration
 
 Creates a new migration with the current date. 
 Will ask for the name of the struct you want to create a migration for.
-
-See also [migration docs]({{< ref "mage.md" >}}).
 
 ## Misc
 

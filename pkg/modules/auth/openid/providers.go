@@ -17,15 +17,14 @@
 package openid
 
 import (
+	"context"
 	"regexp"
 	"strconv"
 	"strings"
 
-	"code.vikunja.io/api/pkg/log"
-
 	"code.vikunja.io/api/pkg/config"
 	"code.vikunja.io/api/pkg/modules/keyvalue"
-	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/coreos/go-oidc"
 	"golang.org/x/oauth2"
 )
 
@@ -35,8 +34,7 @@ func GetAllProviders() (providers []*Provider, err error) {
 		return nil, nil
 	}
 
-	providers = []*Provider{}
-	exists, err := keyvalue.GetWithValue("openid_providers", &providers)
+	ps, exists, err := keyvalue.Get("openid_providers")
 	if !exists {
 		rawProviders := config.AuthOpenIDProviders.Get()
 		if rawProviders == nil {
@@ -60,14 +58,8 @@ func GetAllProviders() (providers []*Provider, err error) {
 			}
 
 			provider, err := getProviderFromMap(pi)
-
 			if err != nil {
-				if provider != nil {
-					log.Errorf("Error while getting openid provider %s: %s", provider.Name, err)
-					continue
-				}
-				log.Errorf("Error while getting openid provider: %s", err)
-				continue
+				return nil, err
 			}
 
 			providers = append(providers, provider)
@@ -81,30 +73,31 @@ func GetAllProviders() (providers []*Provider, err error) {
 		err = keyvalue.Put("openid_providers", providers)
 	}
 
+	if ps != nil {
+		return ps.([]*Provider), nil
+	}
+
 	return
 }
 
 // GetProvider retrieves a provider from keyvalue
 func GetProvider(key string) (provider *Provider, err error) {
-	provider = &Provider{}
-	exists, err := keyvalue.GetWithValue("openid_provider_"+key, provider)
-	if err != nil {
-		return nil, err
-	}
-	if !exists {
+	var p interface{}
+	p, exists, err := keyvalue.Get("openid_provider_" + key)
+	if exists {
 		_, err = GetAllProviders() // This will put all providers in cache
 		if err != nil {
 			return nil, err
 		}
 
-		_, err = keyvalue.GetWithValue("openid_provider_"+key, provider)
-		if err != nil {
-			return nil, err
-		}
+		p, _, err = keyvalue.Get("openid_provider_" + key)
 	}
 
-	err = provider.setOicdProvider()
-	return
+	if p != nil {
+		return p.(*Provider), nil
+	}
+
+	return nil, err
 }
 
 func getKeyFromName(name string) string {
@@ -112,7 +105,7 @@ func getKeyFromName(name string) string {
 	return reg.ReplaceAllString(strings.ToLower(name), "")
 }
 
-func getProviderFromMap(pi map[string]interface{}) (provider *Provider, err error) {
+func getProviderFromMap(pi map[string]interface{}) (*Provider, error) {
 	name, is := pi["name"].(string)
 	if !is {
 		return nil, nil
@@ -120,18 +113,11 @@ func getProviderFromMap(pi map[string]interface{}) (provider *Provider, err erro
 
 	k := getKeyFromName(name)
 
-	logoutURL, ok := pi["logouturl"].(string)
-	if !ok {
-		logoutURL = ""
-	}
-
-	provider = &Provider{
-		Name:            pi["name"].(string),
-		Key:             k,
-		AuthURL:         pi["authurl"].(string),
-		OriginalAuthURL: pi["authurl"].(string),
-		ClientSecret:    pi["clientsecret"].(string),
-		LogoutURL:       logoutURL,
+	provider := &Provider{
+		Name:         pi["name"].(string),
+		Key:          k,
+		AuthURL:      pi["authurl"].(string),
+		ClientSecret: pi["clientsecret"].(string),
 	}
 
 	cl, is := pi["clientid"].(int)
@@ -141,17 +127,19 @@ func getProviderFromMap(pi map[string]interface{}) (provider *Provider, err erro
 		provider.ClientID = pi["clientid"].(string)
 	}
 
-	err = provider.setOicdProvider()
+	var err error
+	provider.OpenIDProvider, err = oidc.NewProvider(context.Background(), provider.AuthURL)
 	if err != nil {
-		return
+		return nil, err
 	}
 
 	provider.Oauth2Config = &oauth2.Config{
 		ClientID:     provider.ClientID,
 		ClientSecret: provider.ClientSecret,
 		RedirectURL:  config.AuthOpenIDRedirectURL.GetString() + k,
+
 		// Discovery returns the OAuth2 endpoints.
-		Endpoint: provider.openIDProvider.Endpoint(),
+		Endpoint: provider.OpenIDProvider.Endpoint(),
 
 		// "openid" is a required scope for OpenID Connect flows.
 		Scopes: []string{oidc.ScopeOpenID, "profile", "email"},
@@ -159,5 +147,5 @@ func getProviderFromMap(pi map[string]interface{}) (provider *Provider, err erro
 
 	provider.AuthURL = provider.Oauth2Config.Endpoint.AuthURL
 
-	return
+	return provider, nil
 }

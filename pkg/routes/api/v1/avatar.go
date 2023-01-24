@@ -17,7 +17,6 @@
 package v1
 
 import (
-	"code.vikunja.io/api/pkg/config"
 	"code.vikunja.io/api/pkg/db"
 	"code.vikunja.io/api/pkg/files"
 	"code.vikunja.io/api/pkg/log"
@@ -26,7 +25,6 @@ import (
 	"code.vikunja.io/api/pkg/modules/avatar/empty"
 	"code.vikunja.io/api/pkg/modules/avatar/gravatar"
 	"code.vikunja.io/api/pkg/modules/avatar/initials"
-	"code.vikunja.io/api/pkg/modules/avatar/marble"
 	"code.vikunja.io/api/pkg/modules/avatar/upload"
 	"code.vikunja.io/api/pkg/user"
 	"code.vikunja.io/web/handler"
@@ -50,7 +48,7 @@ import (
 // @tags user
 // @Produce octet-stream
 // @Param username path string true "The username of the user who's avatar you want to get"
-// @Param size query int false "The size of the avatar you want to get. If bigger than the max configured size this will be adjusted to the maximum size."
+// @Param size query int false "The size of the avatar you want to get"
 // @Success 200 {} blob "The avatar"
 // @Failure 404 {object} models.Message "The user does not exist."
 // @Failure 500 {object} models.Message "Internal error"
@@ -79,8 +77,6 @@ func GetAvatar(c echo.Context) error {
 		avatarProvider = &initials.Provider{}
 	case "upload":
 		avatarProvider = &upload.Provider{}
-	case "marble":
-		avatarProvider = &marble.Provider{}
 	default:
 		avatarProvider = &empty.Provider{}
 	}
@@ -97,9 +93,6 @@ func GetAvatar(c echo.Context) error {
 			log.Errorf("Error parsing size: %v", err)
 			return handler.HandleHTTPError(err, c)
 		}
-	}
-	if sizeInt > config.ServiceMaxAvatarSize.GetInt64() {
-		sizeInt = config.ServiceMaxAvatarSize.GetInt64()
 	}
 
 	// Get the avatar

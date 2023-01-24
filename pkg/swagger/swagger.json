@@ -86,7 +86,7 @@
                     {
                         "type": "integer",
                         "description": "Unsplash Image ID",
-                        "name": "image",
+                        "name": "thumb",
                         "in": "path",
                         "required": true
                     }
@@ -132,7 +132,7 @@
                     {
                         "type": "integer",
                         "description": "Unsplash Image ID",
-                        "name": "image",
+                        "name": "thumb",
                         "in": "path",
                         "required": true
                     }
@@ -226,7 +226,7 @@
                 ],
                 "summary": "Creates a new saved filter",
                 "responses": {
-                    "201": {
+                    "200": {
                         "description": "The Saved Filter",
                         "schema": {
                             "$ref": "#/definitions/models.SavedFilter"
@@ -507,7 +507,7 @@
                     }
                 ],
                 "responses": {
-                    "201": {
+                    "200": {
                         "description": "The created label object.",
                         "schema": {
                             "$ref": "#/definitions/models.Label"
@@ -857,7 +857,7 @@
                     }
                 ],
                 "responses": {
-                    "201": {
+                    "200": {
                         "description": "The created task object.",
                         "schema": {
                             "$ref": "#/definitions/models.Task"
@@ -1555,7 +1555,7 @@
                     }
                 ],
                 "responses": {
-                    "201": {
+                    "200": {
                         "description": "The created team\u003c-\u003elist relation.",
                         "schema": {
                             "$ref": "#/definitions/models.TeamList"
@@ -1693,7 +1693,7 @@
                     }
                 ],
                 "responses": {
-                    "201": {
+                    "200": {
                         "description": "The created user\u003c-\u003elist relation.",
                         "schema": {
                             "$ref": "#/definitions/models.ListUser"
@@ -1888,7 +1888,7 @@
                     }
                 ],
                 "responses": {
-                    "201": {
+                    "200": {
                         "description": "The created list.",
                         "schema": {
                             "$ref": "#/definitions/models.ListDuplicate"
@@ -1979,7 +1979,7 @@
                     },
                     {
                         "type": "string",
-                        "description": "The value to filter for. You can use [grafana](https://grafana.com/docs/grafana/latest/dashboards/time-range-controls)- or [elasticsearch](https://www.elastic.co/guide/en/elasticsearch/reference/7.3/common-options.html#date-math)-style relative dates for all date fields like `due_date`, `start_date`, `end_date`, etc.",
+                        "description": "The value to filter for.",
                         "name": "filter_value",
                         "in": "query"
                     },
@@ -2376,7 +2376,7 @@
                     }
                 ],
                 "responses": {
-                    "201": {
+                    "200": {
                         "description": "The created link share object.",
                         "schema": {
                             "$ref": "#/definitions/models.LinkSharing"
@@ -2690,80 +2690,6 @@
                 }
             }
         },
-        "/migration/ticktick/migrate": {
-            "post": {
-                "security": [
-                    {
-                        "JWTKeyAuth": []
-                    }
-                ],
-                "description": "Imports all projects, tasks, notes, reminders, subtasks and files from a TickTick backup export into Vikunja.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "migration"
-                ],
-                "summary": "Import all lists, tasks etc. from a TickTick backup export",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "The TickTick backup csv file.",
-                        "name": "import",
-                        "in": "formData",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "A message telling you everything was migrated successfully.",
-                        "schema": {
-                            "$ref": "#/definitions/models.Message"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/models.Message"
-                        }
-                    }
-                }
-            }
-        },
-        "/migration/ticktick/status": {
-            "get": {
-                "security": [
-                    {
-                        "JWTKeyAuth": []
-                    }
-                ],
-                "description": "Returns if the current user already did the migation or not. This is useful to show a confirmation message in the frontend if the user is trying to do the same migration again.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "migration"
-                ],
-                "summary": "Get migration status",
-                "responses": {
-                    "200": {
-                        "description": "The migration status",
-                        "schema": {
-                            "$ref": "#/definitions/migration.Status"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/models.Message"
-                        }
-                    }
-                }
-            }
-        },
         "/migration/todoist/auth": {
             "get": {
                 "security": [
@@ -2978,14 +2904,45 @@
                 }
             }
         },
-        "/migration/vikunja-file/migrate": {
+        "/migration/wunderlist/auth": {
+            "get": {
+                "security": [
+                    {
+                        "JWTKeyAuth": []
+                    }
+                ],
+                "description": "Returns the auth url where the user needs to get its auth code. This code can then be used to migrate everything from wunderlist to Vikunja.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "migration"
+                ],
+                "summary": "Get the auth url from wunderlist",
+                "responses": {
+                    "200": {
+                        "description": "The auth url.",
+                        "schema": {
+                            "$ref": "#/definitions/handler.AuthURL"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/models.Message"
+                        }
+                    }
+                }
+            }
+        },
+        "/migration/wunderlist/migrate": {
             "post": {
                 "security": [
                     {
                         "JWTKeyAuth": []
                     }
                 ],
-                "description": "Imports all projects, tasks, notes, reminders, subtasks and files from a Vikunjda data export into Vikunja.",
+                "description": "Migrates all folders, lists, tasks, notes, reminders, subtasks and files from wunderlist to vikunja.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2995,14 +2952,16 @@
                 "tags": [
                     "migration"
                 ],
-                "summary": "Import all lists, tasks etc. from a Vikunja data export",
+                "summary": "Migrate all lists, tasks etc. from wunderlist",
                 "parameters": [
                     {
-                        "type": "string",
-                        "description": "The Vikunja export zip file.",
-                        "name": "import",
-                        "in": "formData",
-                        "required": true
+                        "description": "The auth code previously obtained from the auth url. See the docs for /migration/wunderlist/auth.",
+                        "name": "migrationCode",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/wunderlist.Migration"
+                        }
                     }
                 ],
                 "responses": {
@@ -3021,7 +2980,7 @@
                 }
             }
         },
-        "/migration/vikunja-file/status": {
+        "/migration/wunderlist/status": {
             "get": {
                 "security": [
                     {
@@ -3213,7 +3172,7 @@
                     }
                 ],
                 "responses": {
-                    "201": {
+                    "200": {
                         "description": "The created namespace.",
                         "schema": {
                             "$ref": "#/definitions/models.Namespace"
@@ -3502,7 +3461,7 @@
                     }
                 ],
                 "responses": {
-                    "201": {
+                    "200": {
                         "description": "The created team\u003c-\u003enamespace relation.",
                         "schema": {
                             "$ref": "#/definitions/models.TeamNamespace"
@@ -3640,7 +3599,7 @@
                     }
                 ],
                 "responses": {
-                    "201": {
+                    "200": {
                         "description": "The created user\u003c-\u003enamespace relation.",
                         "schema": {
                             "$ref": "#/definitions/models.NamespaceUser"
@@ -3710,7 +3669,7 @@
                     }
                 ],
                 "responses": {
-                    "201": {
+                    "200": {
                         "description": "The created list.",
                         "schema": {
                             "$ref": "#/definitions/models.List"
@@ -4239,7 +4198,7 @@
                     }
                 ],
                 "responses": {
-                    "201": {
+                    "200": {
                         "description": "The subscription",
                         "schema": {
                             "$ref": "#/definitions/models.Subscription"
@@ -4993,7 +4952,7 @@
                     }
                 ],
                 "responses": {
-                    "201": {
+                    "200": {
                         "description": "The created assingee object.",
                         "schema": {
                             "$ref": "#/definitions/models.TaskAssginee"
@@ -5051,7 +5010,7 @@
                     }
                 ],
                 "responses": {
-                    "201": {
+                    "200": {
                         "description": "The created assingees object.",
                         "schema": {
                             "$ref": "#/definitions/models.TaskAssginee"
@@ -5209,7 +5168,7 @@
                     }
                 ],
                 "responses": {
-                    "201": {
+                    "200": {
                         "description": "The created task comment object.",
                         "schema": {
                             "$ref": "#/definitions/models.TaskComment"
@@ -5449,7 +5408,7 @@
                     }
                 ],
                 "responses": {
-                    "201": {
+                    "200": {
                         "description": "The updated labels object.",
                         "schema": {
                             "$ref": "#/definitions/models.LabelTaskBulk"
@@ -5507,7 +5466,7 @@
                     }
                 ],
                 "responses": {
-                    "201": {
+                    "200": {
                         "description": "The created task relation object.",
                         "schema": {
                             "$ref": "#/definitions/models.TaskRelation"
@@ -5572,7 +5531,7 @@
                     {
                         "type": "integer",
                         "description": "The id of the other task.",
-                        "name": "otherTaskId",
+                        "name": "otherTaskID",
                         "in": "path",
                         "required": true
                     }
@@ -5704,7 +5663,7 @@
                     }
                 ],
                 "responses": {
-                    "201": {
+                    "200": {
                         "description": "The created label relation object.",
                         "schema": {
                             "$ref": "#/definitions/models.LabelTask"
@@ -5884,7 +5843,7 @@
                     }
                 ],
                 "responses": {
-                    "201": {
+                    "200": {
                         "description": "The created team.",
                         "schema": {
                             "$ref": "#/definitions/models.Team"
@@ -6091,7 +6050,7 @@
                     }
                 ],
                 "responses": {
-                    "201": {
+                    "200": {
                         "description": "The newly created member object",
                         "schema": {
                             "$ref": "#/definitions/models.TeamMember"
@@ -6125,7 +6084,7 @@
                         "JWTKeyAuth": []
                     }
                 ],
-                "description": "Remove a user from a team. This will also revoke any access this user might have via that team. A user can remove themselves from the team if they are not the last user in the team.",
+                "description": "Remove a user from a team. This will also revoke any access this user might have via that team.",
                 "produces": [
                     "application/json"
                 ],
@@ -6332,244 +6291,6 @@
                     },
                     "500": {
                         "description": "Internal error",
-                        "schema": {
-                            "$ref": "#/definitions/models.Message"
-                        }
-                    }
-                }
-            }
-        },
-        "/user/deletion/cancel": {
-            "post": {
-                "description": "Aborts an in-progress user deletion.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "user"
-                ],
-                "summary": "Abort a user deletion request",
-                "parameters": [
-                    {
-                        "description": "The user password to confirm.",
-                        "name": "credentials",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v1.UserPasswordConfirmation"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.Message"
-                        }
-                    },
-                    "412": {
-                        "description": "Bad password provided.",
-                        "schema": {
-                            "$ref": "#/definitions/web.HTTPError"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal error",
-                        "schema": {
-                            "$ref": "#/definitions/models.Message"
-                        }
-                    }
-                }
-            }
-        },
-        "/user/deletion/confirm": {
-            "post": {
-                "description": "Confirms the deletion request of a user sent via email.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "user"
-                ],
-                "summary": "Confirm a user deletion request",
-                "parameters": [
-                    {
-                        "description": "The token.",
-                        "name": "credentials",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v1.UserDeletionRequestConfirm"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.Message"
-                        }
-                    },
-                    "412": {
-                        "description": "Bad token provided.",
-                        "schema": {
-                            "$ref": "#/definitions/web.HTTPError"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal error",
-                        "schema": {
-                            "$ref": "#/definitions/models.Message"
-                        }
-                    }
-                }
-            }
-        },
-        "/user/deletion/request": {
-            "post": {
-                "description": "Requests the deletion of the current user. It will trigger an email which has to be confirmed to start the deletion.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "user"
-                ],
-                "summary": "Request the deletion of the user",
-                "parameters": [
-                    {
-                        "description": "The user password.",
-                        "name": "credentials",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v1.UserPasswordConfirmation"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.Message"
-                        }
-                    },
-                    "412": {
-                        "description": "Bad password provided.",
-                        "schema": {
-                            "$ref": "#/definitions/web.HTTPError"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal error",
-                        "schema": {
-                            "$ref": "#/definitions/models.Message"
-                        }
-                    }
-                }
-            }
-        },
-        "/user/export/download": {
-            "post": {
-                "security": [
-                    {
-                        "JWTKeyAuth": []
-                    }
-                ],
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "user"
-                ],
-                "summary": "Download a user data export.",
-                "parameters": [
-                    {
-                        "description": "User password to confirm the download.",
-                        "name": "password",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v1.UserPasswordConfirmation"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.Message"
-                        }
-                    },
-                    "400": {
-                        "description": "Something's invalid.",
-                        "schema": {
-                            "$ref": "#/definitions/web.HTTPError"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error.",
-                        "schema": {
-                            "$ref": "#/definitions/models.Message"
-                        }
-                    }
-                }
-            }
-        },
-        "/user/export/request": {
-            "post": {
-                "security": [
-                    {
-                        "JWTKeyAuth": []
-                    }
-                ],
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "user"
-                ],
-                "summary": "Request a user data export.",
-                "parameters": [
-                    {
-                        "description": "User password to confirm the data export request.",
-                        "name": "password",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v1.UserPasswordConfirmation"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.Message"
-                        }
-                    },
-                    "400": {
-                        "description": "Something's invalid.",
-                        "schema": {
-                            "$ref": "#/definitions/web.HTTPError"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error.",
                         "schema": {
                             "$ref": "#/definitions/models.Message"
                         }
@@ -6977,153 +6698,6 @@
                 }
             }
         },
-        "/user/settings/token/caldav": {
-            "get": {
-                "security": [
-                    {
-                        "JWTKeyAuth": []
-                    }
-                ],
-                "description": "Return the IDs and created dates of all caldav tokens for the current user.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "user"
-                ],
-                "summary": "Returns the caldav tokens for the current user",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/user.Token"
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Something's invalid.",
-                        "schema": {
-                            "$ref": "#/definitions/web.HTTPError"
-                        }
-                    },
-                    "404": {
-                        "description": "User does not exist.",
-                        "schema": {
-                            "$ref": "#/definitions/web.HTTPError"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error.",
-                        "schema": {
-                            "$ref": "#/definitions/models.Message"
-                        }
-                    }
-                }
-            },
-            "put": {
-                "security": [
-                    {
-                        "JWTKeyAuth": []
-                    }
-                ],
-                "description": "Generates a caldav token which can be used for the caldav api. It is not possible to see the token again after it was generated.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "user"
-                ],
-                "summary": "Generate a caldav token",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/user.Token"
-                        }
-                    },
-                    "400": {
-                        "description": "Something's invalid.",
-                        "schema": {
-                            "$ref": "#/definitions/web.HTTPError"
-                        }
-                    },
-                    "404": {
-                        "description": "User does not exist.",
-                        "schema": {
-                            "$ref": "#/definitions/web.HTTPError"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error.",
-                        "schema": {
-                            "$ref": "#/definitions/models.Message"
-                        }
-                    }
-                }
-            }
-        },
-        "/user/settings/token/caldav/{id}": {
-            "get": {
-                "security": [
-                    {
-                        "JWTKeyAuth": []
-                    }
-                ],
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "user"
-                ],
-                "summary": "Delete a caldav token by id",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Token ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.Message"
-                        }
-                    },
-                    "400": {
-                        "description": "Something's invalid.",
-                        "schema": {
-                            "$ref": "#/definitions/web.HTTPError"
-                        }
-                    },
-                    "404": {
-                        "description": "User does not exist.",
-                        "schema": {
-                            "$ref": "#/definitions/web.HTTPError"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error.",
-                        "schema": {
-                            "$ref": "#/definitions/models.Message"
-                        }
-                    }
-                }
-            }
-        },
         "/user/settings/totp": {
             "get": {
                 "security": [
@@ -7358,43 +6932,6 @@
                 }
             }
         },
-        "/user/timezones": {
-            "get": {
-                "security": [
-                    {
-                        "JWTKeyAuth": []
-                    }
-                ],
-                "description": "Because available time zones depend on the system Vikunja is running on, this endpoint returns a list of all valid time zones this particular Vikunja instance can handle. The list of time zones is not sorted, you should sort it on the client.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "user"
-                ],
-                "summary": "Get all available time zones on this vikunja instance",
-                "responses": {
-                    "200": {
-                        "description": "All available time zones.",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error.",
-                        "schema": {
-                            "$ref": "#/definitions/models.Message"
-                        }
-                    }
-                }
-            }
-        },
         "/user/token": {
             "post": {
                 "description": "Returns a new valid jwt user token with an extended length.",
@@ -7495,7 +7032,7 @@
                     },
                     {
                         "type": "integer",
-                        "description": "The size of the avatar you want to get. If bigger than the max configured size this will be adjusted to the maximum size.",
+                        "description": "The size of the avatar you want to get",
                         "name": "size",
                         "in": "query"
                     }
@@ -7535,14 +7072,12 @@
         "background.Image": {
             "type": "object",
             "properties": {
-                "blur_hash": {
-                    "type": "string"
-                },
                 "id": {
                     "type": "string"
                 },
                 "info": {
-                    "description": "This can be used to supply extra information from an image provider to clients"
+                    "description": "This can be used to supply extra information from an image provider to clients",
+                    "type": "object"
                 },
                 "thumb": {
                     "type": "string"
@@ -7611,11 +7146,36 @@
                 },
                 "created_by": {
                     "description": "The user who initially created the bucket.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/user.User"
-                        }
-                    ]
+                    "$ref": "#/definitions/user.User"
+                },
+                "filter_by": {
+                    "description": "The field name of the field to filter by",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "filter_comparator": {
+                    "description": "The comparator for field and value",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "filter_concat": {
+                    "description": "The way all filter conditions are concatenated together, can be either \"and\" or \"or\".,",
+                    "type": "string"
+                },
+                "filter_include_nulls": {
+                    "description": "If set to true, the result will also include null values",
+                    "type": "boolean"
+                },
+                "filter_value": {
+                    "description": "The value of the field name to filter by",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "id": {
                     "description": "The unique, numeric id of this bucket.",
@@ -7634,9 +7194,19 @@
                     "description": "The list this bucket belongs to.",
                     "type": "integer"
                 },
-                "position": {
-                    "description": "The position this bucket has when querying all buckets. See the tasks.position property on how to use this.",
-                    "type": "number"
+                "order_by": {
+                    "description": "The query parameter to order the items by. This can be either asc or desc, with asc being the default.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "sort_by": {
+                    "description": "The query parameter to sort by. This is for ex. done, priority, etc.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "tasks": {
                     "description": "All tasks which belong to this bucket.",
@@ -7689,21 +7259,13 @@
                     "description": "BucketID is the ID of the kanban bucket this task belongs to.",
                     "type": "integer"
                 },
-                "cover_image_attachment_id": {
-                    "description": "If this task has a cover image, the field will return the id of the attachment that is the cover image.",
-                    "type": "integer"
-                },
                 "created": {
                     "description": "A timestamp when this task was created. You cannot change this value.",
                     "type": "string"
                 },
                 "created_by": {
                     "description": "The user who initially created the task.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/user.User"
-                        }
-                    ]
+                    "$ref": "#/definitions/user.User"
                 },
                 "description": {
                     "description": "The task description.",
@@ -7743,12 +7305,8 @@
                     "type": "integer"
                 },
                 "is_favorite": {
-                    "description": "True if a task is a favorite task. Favorite tasks show up in a separate \"Important\" list. This value depends on the user making the call to the api.",
+                    "description": "True if a task is a favorite task. Favorite tasks show up in a separate \"Important\" list",
                     "type": "boolean"
-                },
-                "kanban_position": {
-                    "description": "The position of tasks in the kanban board. See the docs for the `position` property on how to use this.",
-                    "type": "number"
                 },
                 "labels": {
                     "description": "An array of labels which are associated with this task.",
@@ -7775,11 +7333,7 @@
                 },
                 "related_tasks": {
                     "description": "All related tasks, grouped by their relation kind",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/models.RelatedTaskMap"
-                        }
-                    ]
+                    "$ref": "#/definitions/models.RelatedTaskMap"
                 },
                 "reminder_dates": {
                     "description": "An array of datetimes when the user wants to be reminded of the task.",
@@ -7794,11 +7348,7 @@
                 },
                 "repeat_mode": {
                     "description": "Can have three possible values which will trigger when the task is marked as done: 0 = repeats after the amount specified in repeat_after, 1 = repeats all dates each months (ignoring repeat_after), 3 = repeats from the current date rather than the last set date.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/models.TaskRepeatMode"
-                        }
-                    ]
+                    "type": "integer"
                 },
                 "start_date": {
                     "description": "When this task starts.",
@@ -7806,11 +7356,7 @@
                 },
                 "subscription": {
                     "description": "The subscription status for the user reading this task. You can only read this property, use the subscription endpoints to modify it.\nWill only returned when retreiving one task.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/models.Subscription"
-                        }
-                    ]
+                    "$ref": "#/definitions/models.Subscription"
                 },
                 "task_ids": {
                     "description": "A list of task ids to update",
@@ -7822,6 +7368,7 @@
                 "title": {
                     "description": "The task text. This is what you'll see in the list.",
                     "type": "string",
+                    "maxLength": 250,
                     "minLength": 1
                 },
                 "updated": {
@@ -7846,7 +7393,8 @@
                     "type": "string"
                 },
                 "notification": {
-                    "description": "The actual content of the notification."
+                    "description": "The actual content of the notification.",
+                    "type": "object"
                 },
                 "read": {
                     "description": "Whether or not to mark this notification as read or unread.\nTrue is read, false is unread.",
@@ -7867,11 +7415,7 @@
                 },
                 "created_by": {
                     "description": "The user who created this label",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/user.User"
-                        }
-                    ]
+                    "$ref": "#/definitions/user.User"
                 },
                 "description": {
                     "description": "The label description.",
@@ -7948,31 +7492,19 @@
                 },
                 "right": {
                     "description": "The right this list is shared with. 0 = Read only, 1 = Read \u0026 Write, 2 = Admin. See the docs for more details.",
+                    "type": "integer",
                     "default": 0,
-                    "maximum": 2,
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/models.Right"
-                        }
-                    ]
+                    "maximum": 2
                 },
                 "shared_by": {
                     "description": "The user who shared this list",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/user.User"
-                        }
-                    ]
+                    "$ref": "#/definitions/user.User"
                 },
                 "sharing_type": {
                     "description": "The kind of this link. 0 = undefined, 1 = without password, 2 = with password.",
+                    "type": "integer",
                     "default": 0,
-                    "maximum": 2,
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/models.SharingType"
-                        }
-                    ]
+                    "maximum": 2
                 },
                 "updated": {
                     "description": "A timestamp when this share was last updated. You cannot change this value.",
@@ -7983,12 +7515,9 @@
         "models.List": {
             "type": "object",
             "properties": {
-                "background_blur_hash": {
-                    "description": "Contains a very small version of the list background to use as a blurry preview until the actual background is loaded. Check out https://blurha.sh/ to learn how it works.",
-                    "type": "string"
-                },
                 "background_information": {
-                    "description": "Holds extra information about the background set since some background providers require attribution or similar. If not null, the background can be accessed at /lists/{listID}/background"
+                    "description": "Holds extra information about the background set since some background providers require attribution or similar. If not null, the background can be accessed at /lists/{listID}/background",
+                    "type": "object"
                 },
                 "created": {
                     "description": "A timestamp when this list was created. You cannot change this value.",
@@ -8018,7 +7547,7 @@
                     "type": "boolean"
                 },
                 "is_favorite": {
-                    "description": "True if a list is a favorite. Favorite lists show up in a separate namespace. This value depends on the user making the call to the api.",
+                    "description": "True if a list is a favorite. Favorite lists show up in a separate namespace.",
                     "type": "boolean"
                 },
                 "namespace_id": {
@@ -8026,23 +7555,11 @@
                 },
                 "owner": {
                     "description": "The user who created this list.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/user.User"
-                        }
-                    ]
-                },
-                "position": {
-                    "description": "The position this list has when querying all lists. See the tasks.position property on how to use this.",
-                    "type": "number"
+                    "$ref": "#/definitions/user.User"
                 },
                 "subscription": {
                     "description": "The subscription status for the user reading this list. You can only read this property, use the subscription endpoints to modify it.\nWill only returned when retreiving one list.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/models.Subscription"
-                        }
-                    ]
+                    "$ref": "#/definitions/models.Subscription"
                 },
                 "title": {
                     "description": "The title of the list. You'll see this in the namespace overview.",
@@ -8061,11 +7578,7 @@
             "properties": {
                 "list": {
                     "description": "The copied list",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/models.List"
-                        }
-                    ]
+                    "$ref": "#/definitions/models.List"
                 },
                 "namespace_id": {
                     "description": "The target namespace ID",
@@ -8086,13 +7599,9 @@
                 },
                 "right": {
                     "description": "The right this user has. 0 = Read only, 1 = Read \u0026 Write, 2 = Admin. See the docs for more details.",
+                    "type": "integer",
                     "default": 0,
-                    "maximum": 2,
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/models.Right"
-                        }
-                    ]
+                    "maximum": 2
                 },
                 "updated": {
                     "description": "A timestamp when this relation was last updated. You cannot change this value.",
@@ -8139,19 +7648,11 @@
                 },
                 "owner": {
                     "description": "The user who owns this namespace",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/user.User"
-                        }
-                    ]
+                    "$ref": "#/definitions/user.User"
                 },
                 "subscription": {
                     "description": "The subscription status for the user reading this namespace. You can only read this property, use the subscription endpoints to modify it.\nWill only returned when retreiving one namespace.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/models.Subscription"
-                        }
-                    ]
+                    "$ref": "#/definitions/models.Subscription"
                 },
                 "title": {
                     "description": "The name of this namespace.",
@@ -8178,13 +7679,9 @@
                 },
                 "right": {
                     "description": "The right this user has. 0 = Read only, 1 = Read \u0026 Write, 2 = Admin. See the docs for more details.",
+                    "type": "integer",
                     "default": 0,
-                    "maximum": 2,
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/models.Right"
-                        }
-                    ]
+                    "maximum": 2
                 },
                 "updated": {
                     "description": "A timestamp when this relation was last updated. You cannot change this value.",
@@ -8228,19 +7725,11 @@
                 },
                 "owner": {
                     "description": "The user who owns this namespace",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/user.User"
-                        }
-                    ]
+                    "$ref": "#/definitions/user.User"
                 },
                 "subscription": {
                     "description": "The subscription status for the user reading this namespace. You can only read this property, use the subscription endpoints to modify it.\nWill only returned when retreiving one namespace.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/models.Subscription"
-                        }
-                    ]
+                    "$ref": "#/definitions/models.Subscription"
                 },
                 "title": {
                     "description": "The name of this namespace.",
@@ -8263,50 +7752,6 @@
                 }
             }
         },
-        "models.RelationKind": {
-            "type": "string",
-            "enum": [
-                "unknown",
-                "subtask",
-                "parenttask",
-                "related",
-                "duplicateof",
-                "duplicates",
-                "blocking",
-                "blocked",
-                "precedes",
-                "follows",
-                "copiedfrom",
-                "copiedto"
-            ],
-            "x-enum-varnames": [
-                "RelationKindUnknown",
-                "RelationKindSubtask",
-                "RelationKindParenttask",
-                "RelationKindRelated",
-                "RelationKindDuplicateOf",
-                "RelationKindDuplicates",
-                "RelationKindBlocking",
-                "RelationKindBlocked",
-                "RelationKindPreceeds",
-                "RelationKindFollows",
-                "RelationKindCopiedFrom",
-                "RelationKindCopiedTo"
-            ]
-        },
-        "models.Right": {
-            "type": "integer",
-            "enum": [
-                0,
-                1,
-                2
-            ],
-            "x-enum-varnames": [
-                "RightRead",
-                "RightWrite",
-                "RightAdmin"
-            ]
-        },
         "models.SavedFilter": {
             "type": "object",
             "properties": {
@@ -8320,11 +7765,7 @@
                 },
                 "filters": {
                     "description": "The actual filters this filter contains",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/models.TaskCollection"
-                        }
-                    ]
+                    "$ref": "#/definitions/models.TaskCollection"
                 },
                 "id": {
                     "description": "The unique numeric id of this saved filter",
@@ -8336,11 +7777,7 @@
                 },
                 "owner": {
                     "description": "The user who owns this filter",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/user.User"
-                        }
-                    ]
+                    "$ref": "#/definitions/user.User"
                 },
                 "title": {
                     "description": "The title of the filter.",
@@ -8353,19 +7790,6 @@
                     "type": "string"
                 }
             }
-        },
-        "models.SharingType": {
-            "type": "integer",
-            "enum": [
-                0,
-                1,
-                2
-            ],
-            "x-enum-varnames": [
-                "SharingTypeUnknown",
-                "SharingTypeWithoutPassword",
-                "SharingTypeWithPassword"
-            ]
         },
         "models.Subscription": {
             "type": "object",
@@ -8387,11 +7811,7 @@
                 },
                 "user": {
                     "description": "The user who made this subscription",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/user.User"
-                        }
-                    ]
+                    "$ref": "#/definitions/user.User"
                 }
             }
         },
@@ -8416,21 +7836,13 @@
                     "description": "BucketID is the ID of the kanban bucket this task belongs to.",
                     "type": "integer"
                 },
-                "cover_image_attachment_id": {
-                    "description": "If this task has a cover image, the field will return the id of the attachment that is the cover image.",
-                    "type": "integer"
-                },
                 "created": {
                     "description": "A timestamp when this task was created. You cannot change this value.",
                     "type": "string"
                 },
                 "created_by": {
                     "description": "The user who initially created the task.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/user.User"
-                        }
-                    ]
+                    "$ref": "#/definitions/user.User"
                 },
                 "description": {
                     "description": "The task description.",
@@ -8470,12 +7882,8 @@
                     "type": "integer"
                 },
                 "is_favorite": {
-                    "description": "True if a task is a favorite task. Favorite tasks show up in a separate \"Important\" list. This value depends on the user making the call to the api.",
+                    "description": "True if a task is a favorite task. Favorite tasks show up in a separate \"Important\" list",
                     "type": "boolean"
-                },
-                "kanban_position": {
-                    "description": "The position of tasks in the kanban board. See the docs for the `position` property on how to use this.",
-                    "type": "number"
                 },
                 "labels": {
                     "description": "An array of labels which are associated with this task.",
@@ -8502,11 +7910,7 @@
                 },
                 "related_tasks": {
                     "description": "All related tasks, grouped by their relation kind",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/models.RelatedTaskMap"
-                        }
-                    ]
+                    "$ref": "#/definitions/models.RelatedTaskMap"
                 },
                 "reminder_dates": {
                     "description": "An array of datetimes when the user wants to be reminded of the task.",
@@ -8521,11 +7925,7 @@
                 },
                 "repeat_mode": {
                     "description": "Can have three possible values which will trigger when the task is marked as done: 0 = repeats after the amount specified in repeat_after, 1 = repeats all dates each months (ignoring repeat_after), 3 = repeats from the current date rather than the last set date.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/models.TaskRepeatMode"
-                        }
-                    ]
+                    "type": "integer"
                 },
                 "start_date": {
                     "description": "When this task starts.",
@@ -8533,15 +7933,12 @@
                 },
                 "subscription": {
                     "description": "The subscription status for the user reading this task. You can only read this property, use the subscription endpoints to modify it.\nWill only returned when retreiving one task.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/models.Subscription"
-                        }
-                    ]
+                    "$ref": "#/definitions/models.Subscription"
                 },
                 "title": {
                     "description": "The task text. This is what you'll see in the list.",
                     "type": "string",
+                    "maxLength": 250,
                     "minLength": 1
                 },
                 "updated": {
@@ -8658,11 +8055,7 @@
                 },
                 "created_by": {
                     "description": "The user who created this relation",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/user.User"
-                        }
-                    ]
+                    "$ref": "#/definitions/user.User"
                 },
                 "other_task_id": {
                     "description": "The ID of the other task, the task which is being related.",
@@ -8670,30 +8063,13 @@
                 },
                 "relation_kind": {
                     "description": "The kind of the relation.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/models.RelationKind"
-                        }
-                    ]
+                    "type": "string"
                 },
                 "task_id": {
                     "description": "The ID of the \"base\" task, the task which has a relation to another.",
                     "type": "integer"
                 }
             }
-        },
-        "models.TaskRepeatMode": {
-            "type": "integer",
-            "enum": [
-                0,
-                1,
-                2
-            ],
-            "x-enum-varnames": [
-                "TaskRepeatModeDefault",
-                "TaskRepeatModeMonth",
-                "TaskRepeatModeFromCurrentDate"
-            ]
         },
         "models.Team": {
             "type": "object",
@@ -8704,11 +8080,7 @@
                 },
                 "created_by": {
                     "description": "The user who created this team.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/user.User"
-                        }
-                    ]
+                    "$ref": "#/definitions/user.User"
                 },
                 "description": {
                     "description": "The team's description.",
@@ -8750,13 +8122,9 @@
                 },
                 "right": {
                     "description": "The right this team has. 0 = Read only, 1 = Read \u0026 Write, 2 = Admin. See the docs for more details.",
+                    "type": "integer",
                     "default": 0,
-                    "maximum": 2,
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/models.Right"
-                        }
-                    ]
+                    "maximum": 2
                 },
                 "team_id": {
                     "description": "The team id.",
@@ -8802,13 +8170,9 @@
                 },
                 "right": {
                     "description": "The right this team has. 0 = Read only, 1 = Read \u0026 Write, 2 = Admin. See the docs for more details.",
+                    "type": "integer",
                     "default": 0,
-                    "maximum": 2,
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/models.Right"
-                        }
-                    ]
+                    "maximum": 2
                 },
                 "team_id": {
                     "description": "The team id.",
@@ -8865,11 +8229,7 @@
                 },
                 "created_by": {
                     "description": "The user who created this team.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/user.User"
-                        }
-                    ]
+                    "$ref": "#/definitions/user.User"
                 },
                 "description": {
                     "description": "The team's description.",
@@ -8893,7 +8253,7 @@
                     "minLength": 1
                 },
                 "right": {
-                    "$ref": "#/definitions/models.Right"
+                    "type": "integer"
                 },
                 "updated": {
                     "description": "A timestamp when this relation was last updated. You cannot change this value.",
@@ -8922,7 +8282,7 @@
                     "type": "string"
                 },
                 "right": {
-                    "$ref": "#/definitions/models.Right"
+                    "type": "integer"
                 },
                 "updated": {
                     "description": "A timestamp when this task was last updated. You cannot change this value.",
@@ -8952,7 +8312,8 @@
                     "type": "string"
                 },
                 "notification": {
-                    "description": "The actual content of the notification."
+                    "description": "The actual content of the notification.",
+                    "type": "object"
                 },
                 "read_at": {
                     "description": "When this notification is marked as read, this will be updated with the current timestamp.",
@@ -8981,9 +8342,6 @@
                     "type": "string"
                 },
                 "key": {
-                    "type": "string"
-                },
-                "logout_url": {
                     "type": "string"
                 },
                 "name": {
@@ -9058,10 +8416,6 @@
         "user.Login": {
             "type": "object",
             "properties": {
-                "long_token": {
-                    "description": "If true, the token returned will be valid a lot longer than default. Useful for \"remember me\" style logins.",
-                    "type": "boolean"
-                },
                 "password": {
                     "description": "The password for the user.",
                     "type": "string"
@@ -9122,20 +8476,6 @@
                 }
             }
         },
-        "user.Token": {
-            "type": "object",
-            "properties": {
-                "created": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "token": {
-                    "type": "string"
-                }
-            }
-        },
         "user.User": {
             "type": "object",
             "properties": {
@@ -9180,15 +8520,7 @@
             "type": "object",
             "properties": {
                 "avatar_provider": {
-                    "description": "The avatar provider. Valid types are `gravatar` (uses the user email), `upload`, `initials`, `marble` (generates a random avatar for each user), `default`.",
-                    "type": "string"
-                }
-            }
-        },
-        "v1.UserDeletionRequestConfirm": {
-            "type": "object",
-            "properties": {
-                "token": {
+                    "description": "The avatar provider. Valid types are `gravatar` (uses the user email), `upload`, `initials`, `default`.",
                     "type": "string"
                 }
             }
@@ -9204,21 +8536,9 @@
                 }
             }
         },
-        "v1.UserPasswordConfirmation": {
-            "type": "object",
-            "properties": {
-                "password": {
-                    "type": "string"
-                }
-            }
-        },
         "v1.UserSettings": {
             "type": "object",
             "properties": {
-                "default_list_id": {
-                    "description": "If a task is created without a specified list this value should be used. Applies\nto tasks made directly in API and from clients.",
-                    "type": "integer"
-                },
                 "discoverable_by_email": {
                     "description": "If true, the user can be found when searching for their exact email.",
                     "type": "boolean"
@@ -9231,10 +8551,6 @@
                     "description": "If enabled, sends email reminders of tasks to the user.",
                     "type": "boolean"
                 },
-                "language": {
-                    "description": "The user's language",
-                    "type": "string"
-                },
                 "name": {
                     "description": "The new name of the current user.",
                     "type": "string"
@@ -9242,18 +8558,6 @@
                 "overdue_tasks_reminders_enabled": {
                     "description": "If enabled, the user will get an email for their overdue tasks each morning.",
                     "type": "boolean"
-                },
-                "overdue_tasks_reminders_time": {
-                    "description": "The time when the daily summary of overdue tasks will be sent via email.",
-                    "type": "string"
-                },
-                "timezone": {
-                    "description": "The user's time zone. Used to send task reminders in the time zone of the user.",
-                    "type": "string"
-                },
-                "week_start": {
-                    "description": "The day when the week starts for this user. 0 = sunday, 1 = monday, etc.",
-                    "type": "integer"
                 }
             }
         },
@@ -9349,13 +8653,7 @@
                 "task_attachments_enabled": {
                     "type": "boolean"
                 },
-                "task_comments_enabled": {
-                    "type": "boolean"
-                },
                 "totp_enabled": {
-                    "type": "boolean"
-                },
-                "user_deletion_enabled": {
                     "type": "boolean"
                 },
                 "version": {
@@ -9370,6 +8668,15 @@
                     "type": "integer"
                 },
                 "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "wunderlist.Migration": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "description": "Code is the code used to get a user api token",
                     "type": "string"
                 }
             }

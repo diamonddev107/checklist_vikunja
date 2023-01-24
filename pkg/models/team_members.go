@@ -32,7 +32,7 @@ import (
 // @Security JWTKeyAuth
 // @Param id path int true "Team ID"
 // @Param team body models.TeamMember true "The user to be added to a team."
-// @Success 201 {object} models.TeamMember "The newly created member object"
+// @Success 200 {object} models.TeamMember "The newly created member object"
 // @Failure 400 {object} web.HTTPError "Invalid member object provided."
 // @Failure 403 {object} web.HTTPError "The user does not have access to the team"
 // @Failure 500 {object} models.Message "Internal error"
@@ -79,7 +79,7 @@ func (tm *TeamMember) Create(s *xorm.Session, a web.Auth) (err error) {
 
 // Delete deletes a user from a team
 // @Summary Remove a user from a team
-// @Description Remove a user from a team. This will also revoke any access this user might have via that team. A user can remove themselves from the team if they are not the last user in the team.
+// @Description Remove a user from a team. This will also revoke any access this user might have via that team.
 // @tags team
 // @Produce json
 // @Security JWTKeyAuth

@@ -17,11 +17,7 @@
 package events
 
 import (
-	"encoding/json"
 	"testing"
-
-	"github.com/ThreeDotsLabs/watermill"
-	"github.com/ThreeDotsLabs/watermill/message"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -50,14 +46,4 @@ func AssertDispatched(t *testing.T, event Event) {
 	}
 
 	assert.True(t, found, "Failed to assert "+event.Name()+" has been dispatched.")
-}
-
-// TestListener takes an event and a listener and calls the listener's Handle method.
-func TestListener(t *testing.T, event Event, listener Listener) {
-	content, err := json.Marshal(event)
-	assert.NoError(t, err)
-
-	msg := message.NewMessage(watermill.NewUUID(), content)
-	err = listener.Handle(msg)
-	assert.NoError(t, err)
 }

@@ -17,10 +17,8 @@
 package redis
 
 import (
-	"bytes"
 	"context"
-	"encoding/gob"
-	"errors"
+	"encoding/json"
 
 	"code.vikunja.io/api/pkg/red"
 	"github.com/go-redis/redis/v8"
@@ -42,28 +40,9 @@ func NewStorage() *Storage {
 
 // Put puts a value into redis
 func (s *Storage) Put(key string, value interface{}) (err error) {
-
-	var v interface{}
-
-	switch value.(type) {
-	case int:
-		v = value
-	case int8:
-		v = value
-	case int16:
-		v = value
-	case int32:
-		v = value
-	case int64:
-		v = value
-	default:
-		var buf bytes.Buffer
-		enc := gob.NewEncoder(&buf)
-		err = enc.Encode(value)
-		if err != nil {
-			return err
-		}
-		return s.client.Set(context.Background(), key, buf.Bytes(), 0).Err()
+	v, err := json.Marshal(value)
+	if err != nil {
+		return err
 	}
 
 	return s.client.Set(context.Background(), key, v, 0).Err()
@@ -71,32 +50,13 @@ func (s *Storage) Put(key string, value interface{}) (err error) {
 
 // Get retrieves a saved value from redis
 func (s *Storage) Get(key string) (value interface{}, exists bool, err error) {
-	value, err = s.client.Get(context.Background(), key).Result()
-	if err != nil && errors.Is(err, redis.Nil) {
-		return nil, false, nil
-	}
-	return value, true, err
-}
-
-func (s *Storage) GetWithValue(key string, value interface{}) (exists bool, err error) {
 	b, err := s.client.Get(context.Background(), key).Bytes()
 	if err != nil {
-		if errors.Is(err, redis.Nil) {
-			return false, nil
-		}
-
-		return
+		return nil, false, err
 	}
 
-	var buf bytes.Buffer
-	_, err = buf.Write(b)
-	if err != nil {
-		return
-	}
-
-	dec := gob.NewDecoder(&buf)
-	err = dec.Decode(value)
-	return true, err
+	err = json.Unmarshal(b, value)
+	return
 }
 
 // Del removed a value from redis

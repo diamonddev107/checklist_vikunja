@@ -237,7 +237,7 @@ type ErrListIsArchived struct {
 	ListID int64
 }
 
-// IsErrListIsArchived checks if an error is a list is archived error.
+// IsErrListIsArchived checks if an error is a .
 func IsErrListIsArchived(err error) bool {
 	_, ok := err.(ErrListIsArchived)
 	return ok
@@ -253,62 +253,6 @@ const ErrCodeListIsArchived = 3008
 // HTTPError holds the http error description
 func (err ErrListIsArchived) HTTPError() web.HTTPError {
 	return web.HTTPError{HTTPCode: http.StatusPreconditionFailed, Code: ErrCodeListIsArchived, Message: "This list is archived. Editing or creating new tasks is not possible."}
-}
-
-// ErrListCannotBelongToAPseudoNamespace represents an error where a list cannot belong to a pseudo namespace
-type ErrListCannotBelongToAPseudoNamespace struct {
-	ListID      int64
-	NamespaceID int64
-}
-
-// IsErrListCannotBelongToAPseudoNamespace checks if an error is a list is archived error.
-func IsErrListCannotBelongToAPseudoNamespace(err error) bool {
-	_, ok := err.(*ErrListCannotBelongToAPseudoNamespace)
-	return ok
-}
-
-func (err *ErrListCannotBelongToAPseudoNamespace) Error() string {
-	return fmt.Sprintf("List cannot belong to a pseudo namespace [ListID: %d, NamespaceID: %d]", err.ListID, err.NamespaceID)
-}
-
-// ErrCodeListCannotBelongToAPseudoNamespace holds the unique world-error code of this error
-const ErrCodeListCannotBelongToAPseudoNamespace = 3009
-
-// HTTPError holds the http error description
-func (err *ErrListCannotBelongToAPseudoNamespace) HTTPError() web.HTTPError {
-	return web.HTTPError{
-		HTTPCode: http.StatusPreconditionFailed,
-		Code:     ErrCodeListCannotBelongToAPseudoNamespace,
-		Message:  "This list cannot belong a dynamically generated namespace.",
-	}
-}
-
-// ErrListMustBelongToANamespace represents an error where a list must belong to a namespace
-type ErrListMustBelongToANamespace struct {
-	ListID      int64
-	NamespaceID int64
-}
-
-// IsErrListMustBelongToANamespace checks if an error is a list must belong to a namespace error.
-func IsErrListMustBelongToANamespace(err error) bool {
-	_, ok := err.(*ErrListMustBelongToANamespace)
-	return ok
-}
-
-func (err *ErrListMustBelongToANamespace) Error() string {
-	return fmt.Sprintf("List must belong to a namespace [ListID: %d, NamespaceID: %d]", err.ListID, err.NamespaceID)
-}
-
-// ErrCodeListMustBelongToANamespace holds the unique world-error code of this error
-const ErrCodeListMustBelongToANamespace = 3010
-
-// HTTPError holds the http error description
-func (err *ErrListMustBelongToANamespace) HTTPError() web.HTTPError {
-	return web.HTTPError{
-		HTTPCode: http.StatusPreconditionFailed,
-		Code:     ErrCodeListMustBelongToANamespace,
-		Message:  "This list must belong to a namespace.",
-	}
 }
 
 // ================
@@ -816,62 +760,6 @@ func (err ErrInvalidTaskFilterValue) HTTPError() web.HTTPError {
 		HTTPCode: http.StatusBadRequest,
 		Code:     ErrCodeInvalidTaskFilterValue,
 		Message:  fmt.Sprintf("The task filter value '%s' for field '%s' is invalid.", err.Value, err.Field),
-	}
-}
-
-// ErrAttachmentDoesNotBelongToTask represents an error where the provided task cover attachment does not belong to the same task
-type ErrAttachmentDoesNotBelongToTask struct {
-	TaskID       int64
-	AttachmentID int64
-}
-
-// IsErrAttachmentAndCoverMustBelongToTheSameTask checks if an error is ErrAttachmentDoesNotBelongToTask.
-func IsErrAttachmentAndCoverMustBelongToTheSameTask(err error) bool {
-	_, ok := err.(ErrAttachmentDoesNotBelongToTask)
-	return ok
-}
-
-func (err ErrAttachmentDoesNotBelongToTask) Error() string {
-	return fmt.Sprintf("Task attachment and cover image do not belong to the same task [TaskID: %d, AttachmentID: %d]", err.TaskID, err.AttachmentID)
-}
-
-// ErrCodeAttachmentDoesNotBelongToTask holds the unique world-error code of this error
-const ErrCodeAttachmentDoesNotBelongToTask = 4020
-
-// HTTPError holds the http error description
-func (err ErrAttachmentDoesNotBelongToTask) HTTPError() web.HTTPError {
-	return web.HTTPError{
-		HTTPCode: http.StatusBadRequest,
-		Code:     ErrCodeAttachmentDoesNotBelongToTask,
-		Message:  "This attachment does not belong to that task.",
-	}
-}
-
-// ErrUserAlreadyAssigned represents an error where the user is already assigned to this task
-type ErrUserAlreadyAssigned struct {
-	TaskID int64
-	UserID int64
-}
-
-// IsErrUserAlreadyAssigned checks if an error is ErrUserAlreadyAssigned.
-func IsErrUserAlreadyAssigned(err error) bool {
-	_, ok := err.(ErrUserAlreadyAssigned)
-	return ok
-}
-
-func (err ErrUserAlreadyAssigned) Error() string {
-	return fmt.Sprintf("User is already assigned to task [TaskID: %d, UserID: %d]", err.TaskID, err.UserID)
-}
-
-// ErrCodeUserAlreadyAssigned holds the unique world-error code of this error
-const ErrCodeUserAlreadyAssigned = 4021
-
-// HTTPError holds the http error description
-func (err ErrUserAlreadyAssigned) HTTPError() web.HTTPError {
-	return web.HTTPError{
-		HTTPCode: http.StatusBadRequest,
-		Code:     ErrCodeUserAlreadyAssigned,
-		Message:  "This user is already assigned to that task.",
 	}
 }
 

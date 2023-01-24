@@ -19,8 +19,6 @@ package models
 import (
 	"time"
 
-	"code.vikunja.io/api/pkg/db"
-
 	"code.vikunja.io/api/pkg/events"
 
 	"code.vikunja.io/api/pkg/user"
@@ -70,7 +68,7 @@ type UserWithRight struct {
 // @Security JWTKeyAuth
 // @Param id path int true "List ID"
 // @Param list body models.ListUser true "The user you want to add to the list."
-// @Success 201 {object} models.ListUser "The created user<->list relation."
+// @Success 200 {object} models.ListUser "The created user<->list relation."
 // @Failure 400 {object} web.HTTPError "Invalid user list object provided."
 // @Failure 404 {object} web.HTTPError "The user does not exist."
 // @Failure 403 {object} web.HTTPError "The user does not have access to the list"
@@ -206,7 +204,7 @@ func (lu *ListUser) ReadAll(s *xorm.Session, a web.Auth, search string, page int
 	query := s.
 		Join("INNER", "users_lists", "user_id = users.id").
 		Where("users_lists.list_id = ?", lu.ListID).
-		Where(db.ILIKE("users.username", search))
+		Where("users.username LIKE ?", "%"+search+"%")
 	if limit > 0 {
 		query = query.Limit(limit, start)
 	}

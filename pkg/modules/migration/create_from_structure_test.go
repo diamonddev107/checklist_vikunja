@@ -32,95 +32,79 @@ func TestInsertFromStructure(t *testing.T) {
 	}
 	t.Run("normal", func(t *testing.T) {
 		db.LoadAndAssertFixtures(t)
-		testStructure := []*models.NamespaceWithListsAndTasks{
+		testStructure := []*models.NamespaceWithLists{
 			{
 				Namespace: models.Namespace{
 					Title:       "Test1",
 					Description: "Lorem Ipsum",
 				},
-				Lists: []*models.ListWithTasksAndBuckets{
+				Lists: []*models.List{
 					{
-						List: models.List{
-							Title:       "Testlist1",
-							Description: "Something",
-						},
+						Title:       "Testlist1",
+						Description: "Something",
 						Buckets: []*models.Bucket{
 							{
 								ID:    1234,
 								Title: "Test Bucket",
 							},
 						},
-						Tasks: []*models.TaskWithComments{
+						Tasks: []*models.Task{
 							{
-								Task: models.Task{
-									Title:       "Task1",
-									Description: "Lorem",
-								},
+								Title:       "Task1",
+								Description: "Lorem",
 							},
 							{
-								Task: models.Task{
-									Title: "Task with related tasks",
-									RelatedTasks: map[models.RelationKind][]*models.Task{
-										models.RelationKindSubtask: {
-											{
-												Title:       "Related to task with related task",
-												Description: "As subtask",
-											},
+								Title: "Task with related tasks",
+								RelatedTasks: map[models.RelationKind][]*models.Task{
+									models.RelationKindSubtask: {
+										{
+											Title:       "Related to task with related task",
+											Description: "As subtask",
 										},
 									},
 								},
 							},
 							{
-								Task: models.Task{
-									Title: "Task with attachments",
-									Attachments: []*models.TaskAttachment{
-										{
-											File: &files.File{
-												Name:        "testfile",
-												Size:        4,
-												FileContent: []byte{1, 2, 3, 4},
-											},
+								Title: "Task with attachments",
+								Attachments: []*models.TaskAttachment{
+									{
+										File: &files.File{
+											Name:        "testfile",
+											Size:        4,
+											FileContent: []byte{1, 2, 3, 4},
 										},
 									},
 								},
 							},
 							{
-								Task: models.Task{
-									Title: "Task with labels",
-									Labels: []*models.Label{
-										{
-											Title:    "Label1",
-											HexColor: "ff00ff",
-										},
-										{
-											Title:    "Label2",
-											HexColor: "ff00ff",
-										},
+								Title: "Task with labels",
+								Labels: []*models.Label{
+									{
+										Title:    "Label1",
+										HexColor: "ff00ff",
+									},
+									{
+										Title:    "Label2",
+										HexColor: "ff00ff",
 									},
 								},
 							},
 							{
-								Task: models.Task{
-									Title: "Task with same label",
-									Labels: []*models.Label{
-										{
-											Title:    "Label1",
-											HexColor: "ff00ff",
-										},
+								Title: "Task with same label",
+								Labels: []*models.Label{
+									{
+										Title:    "Label1",
+										HexColor: "ff00ff",
 									},
 								},
 							},
 							{
-								Task: models.Task{
-									Title:    "Task in a bucket",
-									BucketID: 1234,
-								},
+								Title:    "Task in a bucket",
+								BucketID: 1234,
 							},
 							{
-								Task: models.Task{
-									Title:    "Task in a nonexisting bucket",
-									BucketID: 1111,
-								},
+								Title:    "Task in a nonexisting bucket",
+								BucketID: 1111,
 							},
 						},
 					},

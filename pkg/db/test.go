@@ -23,10 +23,9 @@ import (
 
 	"code.vikunja.io/api/pkg/config"
 	"code.vikunja.io/api/pkg/log"
-
 	"github.com/stretchr/testify/assert"
+	"xorm.io/core"
 	"xorm.io/xorm"
-	"xorm.io/xorm/names"
 )
 
 // CreateTestEngine creates an instance of the db engine which lives in memory
@@ -49,7 +48,7 @@ func CreateTestEngine() (engine *xorm.Engine, err error) {
 		}
 	}
 
-	engine.SetMapper(names.GonicMapper{})
+	engine.SetMapper(core.GonicMapper{})
 	logger := log.NewXormLogger("DEBUG")
 	logger.ShowSQL(os.Getenv("UNIT_TESTS_VERBOSE") == "1")
 	engine.SetLogger(logger)

@@ -19,6 +19,7 @@ package user
 import (
 	"code.vikunja.io/api/pkg/config"
 	"code.vikunja.io/api/pkg/notifications"
+	"code.vikunja.io/api/pkg/utils"
 	"xorm.io/xorm"
 )
 
@@ -43,17 +44,16 @@ func ResetPassword(s *xorm.Session, reset *PasswordReset) (err error) {
 	}
 
 	// Check if we have a token
-	token, err := getToken(s, reset.Token, TokenPasswordReset)
-	if err != nil {
-		return err
-	}
-	if token == nil {
-		return ErrInvalidPasswordResetToken{Token: reset.Token}
-	}
-
-	user, err := GetUserByID(s, token.UserID)
+	user := &User{}
+	exists, err := s.
+		Where("password_reset_token = ?", reset.Token).
+		Get(user)
 	if err != nil {
 		return
+	}
+
+	if !exists {
+		return ErrInvalidPasswordResetToken{Token: reset.Token}
 	}
 
 	// Hash the password
@@ -62,21 +62,17 @@ func ResetPassword(s *xorm.Session, reset *PasswordReset) (err error) {
 		return
 	}
 
-	err = removeTokens(s, user, TokenEmailConfirm)
-	if err != nil {
-		return
-	}
-
-	user.Status = StatusActive
+	// Save it
+	user.PasswordResetToken = ""
 	_, err = s.
-		Cols("password", "status").
+		Cols("password", "password_reset_token").
 		Where("id = ?", user.ID).
 		Update(user)
 	if err != nil {
 		return
 	}
 
-	// Dont send a mail if no mailer is configured
+	// Dont send a mail if we're testing
 	if !config.MailerEnabled.GetBool() {
 		return
 	}
@@ -112,19 +108,24 @@ func RequestUserPasswordResetTokenByEmail(s *xorm.Session, tr *PasswordTokenRequ
 
 // RequestUserPasswordResetToken sends a user a password reset email.
 func RequestUserPasswordResetToken(s *xorm.Session, user *User) (err error) {
-	token, err := generateToken(s, user, TokenPasswordReset)
+	// Generate a token and save it
+	user.PasswordResetToken = utils.MakeRandomString(400)
+
+	// Save it
+	_, err = s.
+		Where("id = ?", user.ID).
+		Update(user)
 	if err != nil {
 		return
 	}
 
-	// Dont send a mail if no mailer is configured
+	// Dont send a mail if we're testing
 	if !config.MailerEnabled.GetBool() {
 		return
 	}
 
 	n := &ResetPasswordNotification{
-		User:  user,
-		Token: token,
+		User: user,
 	}
 
 	err = notifications.Notify(user, n)

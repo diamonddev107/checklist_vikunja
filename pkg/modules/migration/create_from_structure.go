@@ -18,60 +18,33 @@ package migration
 
 import (
 	"bytes"
-	"io"
-
-	"xorm.io/xorm"
+	"io/ioutil"
 
 	"code.vikunja.io/api/pkg/db"
+
+	"code.vikunja.io/api/pkg/files"
 	"code.vikunja.io/api/pkg/log"
 	"code.vikunja.io/api/pkg/models"
-	"code.vikunja.io/api/pkg/modules/background/handler"
 	"code.vikunja.io/api/pkg/user"
 )
 
 // InsertFromStructure takes a fully nested Vikunja data structure and a user and then creates everything for this user
 // (Namespaces, tasks, etc. Even attachments and relations.)
-func InsertFromStructure(str []*models.NamespaceWithListsAndTasks, user *user.User) (err error) {
-	s := db.NewSession()
-	defer s.Close()
-
-	err = insertFromStructure(s, str, user)
-	if err != nil {
-		log.Errorf("[creating structure] Error while creating structure: %s", err.Error())
-		_ = s.Rollback()
-		return err
-	}
-
-	return s.Commit()
-}
-
-func insertFromStructure(s *xorm.Session, str []*models.NamespaceWithListsAndTasks, user *user.User) (err error) {
+func InsertFromStructure(str []*models.NamespaceWithLists, user *user.User) (err error) {
 
 	log.Debugf("[creating structure] Creating %d namespaces", len(str))
 
 	labels := make(map[string]*models.Label)
 
-	archivedLists := []int64{}
-	archivedNamespaces := []int64{}
+	s := db.NewSession()
+	defer s.Close()
 
 	// Create all namespaces
 	for _, n := range str {
-		n.ID = 0
-
-		// Saving the archived status to archive the namespace again after creating it
-		var wasArchived bool
-		if n.IsArchived {
-			n.IsArchived = false
-			wasArchived = true
-		}
-
 		err = n.Create(s, user)
 		if err != nil {
+			_ = s.Rollback()
 			return
-		}
-
-		if wasArchived {
-			archivedNamespaces = append(archivedNamespaces, n.ID)
 		}
 
 		log.Debugf("[creating structure] Created namespace %d", n.ID)
@@ -86,39 +59,32 @@ func insertFromStructure(s *xorm.Session, str []*models.NamespaceWithListsAndTas
 			originalBackgroundInformation := l.BackgroundInformation
 			needsDefaultBucket := false
 
-			// Saving the archived status to archive the list again after creating it
-			var wasArchived bool
-			if l.IsArchived {
-				wasArchived = true
-				l.IsArchived = false
-			}
-
 			l.NamespaceID = n.ID
-			l.ID = 0
 			err = l.Create(s, user)
 			if err != nil {
+				_ = s.Rollback()
 				return
-			}
-
-			if wasArchived {
-				archivedLists = append(archivedLists, l.ID)
 			}
 
 			log.Debugf("[creating structure] Created list %d", l.ID)
 
-			bf, is := originalBackgroundInformation.(*bytes.Buffer)
+			backgroundFile, is := originalBackgroundInformation.(*bytes.Buffer)
 			if is {
-
-				backgroundFile := bytes.NewReader(bf.Bytes())
-
 				log.Debugf("[creating structure] Creating a background file for list %d", l.ID)
 
-				err = handler.SaveBackgroundFile(s, user, &l.List, backgroundFile, "", uint64(backgroundFile.Len()))
+				file, err := files.Create(backgroundFile, "", uint64(backgroundFile.Len()), user)
 				if err != nil {
+					_ = s.Rollback()
 					return err
 				}
 
-				log.Debugf("[creating structure] Created a background file for list %d", l.ID)
+				err = models.SetListBackground(s, l.ID, file)
+				if err != nil {
+					_ = s.Rollback()
+					return err
+				}
+
+				log.Debugf("[creating structure] Created a background file as new file %d for list %d", file.ID, l.ID)
 			}
 
 			// Create all buckets
@@ -132,6 +98,7 @@ func insertFromStructure(s *xorm.Session, str []*models.NamespaceWithListsAndTas
 				bucket.ListID = l.ID
 				err = bucket.Create(s, user)
 				if err != nil {
+					_ = s.Rollback()
 					return
 				}
 				buckets[oldID] = bucket
@@ -140,26 +107,23 @@ func insertFromStructure(s *xorm.Session, str []*models.NamespaceWithListsAndTas
 
 			log.Debugf("[creating structure] Creating %d tasks", len(tasks))
 
-			setBucketOrDefault := func(task *models.Task) {
-				bucket, exists := buckets[task.BucketID]
-				if exists {
-					task.BucketID = bucket.ID
-				} else if task.BucketID > 0 {
-					log.Debugf("[creating structure] No bucket created for original bucket id %d", task.BucketID)
-					task.BucketID = 0
-				}
-				if !exists || task.BucketID == 0 {
-					needsDefaultBucket = true
-				}
-			}
-
 			// Create all tasks
 			for _, t := range tasks {
-				setBucketOrDefault(&t.Task)
+				bucket, exists := buckets[t.BucketID]
+				if exists {
+					t.BucketID = bucket.ID
+				} else if t.BucketID > 0 {
+					log.Debugf("[creating structure] No bucket created for original bucket id %d", t.BucketID)
+					t.BucketID = 0
+				}
+				if !exists || t.BucketID == 0 {
+					needsDefaultBucket = true
+				}
 
 				t.ListID = l.ID
 				err = t.Create(s, user)
 				if err != nil {
+					_ = s.Rollback()
 					return
 				}
 
@@ -178,10 +142,10 @@ func insertFromStructure(s *xorm.Session, str []*models.NamespaceWithListsAndTas
 					for _, rt := range tasks {
 						// First create the related tasks if they do not exist
 						if rt.ID == 0 {
-							setBucketOrDefault(rt)
 							rt.ListID = t.ListID
 							err = rt.Create(s, user)
 							if err != nil {
+								_ = s.Rollback()
 								return
 							}
 							log.Debugf("[creating structure] Created related task %d", rt.ID)
@@ -195,6 +159,7 @@ func insertFromStructure(s *xorm.Session, str []*models.NamespaceWithListsAndTas
 						}
 						err = taskRel.Create(s, user)
 						if err != nil {
+							_ = s.Rollback()
 							return
 						}
 
@@ -211,9 +176,10 @@ func insertFromStructure(s *xorm.Session, str []*models.NamespaceWithListsAndTas
 					// Check if we have a file to create
 					if len(a.File.FileContent) > 0 {
 						a.TaskID = t.ID
-						fr := io.NopCloser(bytes.NewReader(a.File.FileContent))
+						fr := ioutil.NopCloser(bytes.NewReader(a.File.FileContent))
 						err = a.NewAttachment(s, fr, a.File.Name, a.File.Size, user)
 						if err != nil {
+							_ = s.Rollback()
 							return
 						}
 						log.Debugf("[creating structure] Created new attachment %d", a.ID)
@@ -230,6 +196,7 @@ func insertFromStructure(s *xorm.Session, str []*models.NamespaceWithListsAndTas
 					if !exists {
 						err = label.Create(s, user)
 						if err != nil {
+							_ = s.Rollback()
 							return err
 						}
 						log.Debugf("[creating structure] Created new label %d", label.ID)
@@ -242,19 +209,11 @@ func insertFromStructure(s *xorm.Session, str []*models.NamespaceWithListsAndTas
 						TaskID:  t.ID,
 					}
 					err = lt.Create(s, user)
-					if err != nil && !models.IsErrLabelIsAlreadyOnTask(err) {
+					if err != nil {
+						_ = s.Rollback()
 						return err
 					}
 					log.Debugf("[creating structure] Associated task %d with label %d", t.ID, lb.ID)
-				}
-
-				for _, comment := range t.Comments {
-					comment.TaskID = t.ID
-					err = comment.Create(s, user)
-					if err != nil {
-						return
-					}
-					log.Debugf("[creating structure] Created new comment %d", comment.ID)
 				}
 			}
 
@@ -263,11 +222,13 @@ func insertFromStructure(s *xorm.Session, str []*models.NamespaceWithListsAndTas
 				b := &models.Bucket{ListID: l.ID}
 				bucketsIn, _, _, err := b.ReadAll(s, user, "", 1, 1)
 				if err != nil {
+					_ = s.Rollback()
 					return err
 				}
 				buckets := bucketsIn.([]*models.Bucket)
 				err = buckets[0].Delete(s, user)
-				if err != nil && !models.IsErrCannotRemoveLastBucket(err) {
+				if err != nil {
+					_ = s.Rollback()
 					return err
 				}
 			}
@@ -277,27 +238,7 @@ func insertFromStructure(s *xorm.Session, str []*models.NamespaceWithListsAndTas
 		}
 	}
 
-	if len(archivedLists) > 0 {
-		_, err = s.
-			Cols("is_archived").
-			In("id", archivedLists).
-			Update(&models.List{IsArchived: true})
-		if err != nil {
-			return err
-		}
-	}
-
-	if len(archivedNamespaces) > 0 {
-		_, err = s.
-			Cols("is_archived").
-			In("id", archivedNamespaces).
-			Update(&models.Namespace{IsArchived: true})
-		if err != nil {
-			return err
-		}
-	}
-
 	log.Debugf("[creating structure] Done inserting new task structure")
 
-	return nil
+	return s.Commit()
 }

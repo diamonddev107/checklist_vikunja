@@ -21,7 +21,7 @@ type CreatedEvent struct {
 	User *User
 }
 
-// Name defines the name for CreatedEvent
+// TopicName defines the name for CreatedEvent
 func (t *CreatedEvent) Name() string {
 	return "user.created"
 }

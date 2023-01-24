@@ -19,8 +19,6 @@ package models
 import (
 	"time"
 
-	"code.vikunja.io/api/pkg/db"
-
 	"code.vikunja.io/api/pkg/events"
 
 	"code.vikunja.io/web"
@@ -67,7 +65,7 @@ type TeamWithRight struct {
 // @Security JWTKeyAuth
 // @Param id path int true "List ID"
 // @Param list body models.TeamList true "The team you want to add to the list."
-// @Success 201 {object} models.TeamList "The created team<->list relation."
+// @Success 200 {object} models.TeamList "The created team<->list relation."
 // @Failure 400 {object} web.HTTPError "Invalid team list object provided."
 // @Failure 404 {object} web.HTTPError "The team does not exist."
 // @Failure 403 {object} web.HTTPError "The user does not have access to the list"
@@ -200,7 +198,7 @@ func (tl *TeamList) ReadAll(s *xorm.Session, a web.Auth, search string, page int
 		Table("teams").
 		Join("INNER", "team_lists", "team_id = teams.id").
 		Where("team_lists.list_id = ?", tl.ListID).
-		Where(db.ILIKE("teams.name", search))
+		Where("teams.name LIKE ?", "%"+search+"%")
 	if limit > 0 {
 		query = query.Limit(limit, start)
 	}

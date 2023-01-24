@@ -20,10 +20,10 @@ import (
 	"testing"
 	"time"
 
-	"code.vikunja.io/api/pkg/db"
 	"code.vikunja.io/api/pkg/events"
-	"code.vikunja.io/api/pkg/user"
 
+	"code.vikunja.io/api/pkg/db"
+	"code.vikunja.io/api/pkg/user"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -192,12 +192,12 @@ func TestTask_Update(t *testing.T) {
 		defer s.Close()
 
 		task := &Task{
-			ID:             4,
-			Title:          "test10000",
-			Description:    "Lorem Ipsum Dolor",
-			KanbanPosition: 10,
-			ListID:         1,
-			BucketID:       2, // Bucket 2 already has 3 tasks and a limit of 3
+			ID:          4,
+			Title:       "test10000",
+			Description: "Lorem Ipsum Dolor",
+			Position:    10,
+			ListID:      1,
+			BucketID:    2, // Bucket 2 already has 3 tasks and a limit of 3
 		}
 		err := task.Update(s, u)
 		assert.NoError(t, err)
@@ -241,33 +241,6 @@ func TestTask_Update(t *testing.T) {
 			"title":     "test",
 			"list_id":   1,
 			"bucket_id": 3,
-		}, false)
-	})
-	t.Run("moving a repeating task to the done bucket", func(t *testing.T) {
-		db.LoadAndAssertFixtures(t)
-		s := db.NewSession()
-		defer s.Close()
-
-		task := &Task{
-			ID:          28,
-			Title:       "test updated",
-			ListID:      1,
-			BucketID:    3, // Bucket 3 is the done bucket
-			RepeatAfter: 3600,
-		}
-		err := task.Update(s, u)
-		assert.NoError(t, err)
-		err = s.Commit()
-		assert.NoError(t, err)
-		assert.False(t, task.Done)
-		assert.Equal(t, int64(1), task.BucketID) // Bucket should not be updated
-
-		db.AssertExists(t, "tasks", map[string]interface{}{
-			"id":        28,
-			"done":      false,
-			"title":     "test updated",
-			"list_id":   1,
-			"bucket_id": 1,
 		}, false)
 	})
 	t.Run("default bucket when moving a task between lists", func(t *testing.T) {
@@ -335,9 +308,8 @@ func TestTask_Update(t *testing.T) {
 		defer s.Close()
 
 		task := &Task{
-			ID:          28,
-			Done:        true,
-			RepeatAfter: 3600,
+			ID:   28,
+			Done: true,
 		}
 		err := task.Update(s, u)
 		assert.NoError(t, err)
@@ -351,21 +323,6 @@ func TestTask_Update(t *testing.T) {
 			"done":      false,
 			"bucket_id": 1,
 		}, false)
-	})
-	t.Run("moving a task between lists should give it a correct index", func(t *testing.T) {
-		db.LoadAndAssertFixtures(t)
-		s := db.NewSession()
-		defer s.Close()
-
-		task := &Task{
-			ID:     12,
-			ListID: 2, // From list 1
-		}
-		err := task.Update(s, u)
-		assert.NoError(t, err)
-		err = s.Commit()
-		assert.NoError(t, err)
-		assert.Equal(t, int64(3), task.Index)
 	})
 }
 
@@ -761,12 +718,14 @@ func TestTask_ReadOne(t *testing.T) {
 		assert.True(t, IsErrTaskDoesNotExist(err))
 	})
 	t.Run("with subscription", func(t *testing.T) {
+		u = &user.User{ID: 6}
+
 		db.LoadAndAssertFixtures(t)
 		s := db.NewSession()
 		defer s.Close()
 
 		task := &Task{ID: 22}
-		err := task.ReadOne(s, &user.User{ID: 6})
+		err := task.ReadOne(s, u)
 		assert.NoError(t, err)
 		assert.NotNil(t, task.Subscription)
 	})
@@ -783,58 +742,4 @@ func TestTask_ReadOne(t *testing.T) {
 		assert.NotNil(t, task.CreatedBy)
 		assert.Equal(t, int64(-2), task.CreatedBy.ID)
 	})
-	t.Run("favorite", func(t *testing.T) {
-		db.LoadAndAssertFixtures(t)
-		s := db.NewSession()
-		defer s.Close()
-
-		task := &Task{ID: 1}
-		err := task.ReadOne(s, u)
-		assert.NoError(t, err)
-		assert.True(t, task.IsFavorite)
-	})
-	t.Run("favorite for a different user", func(t *testing.T) {
-		db.LoadAndAssertFixtures(t)
-		s := db.NewSession()
-		defer s.Close()
-
-		task := &Task{ID: 1}
-		err := task.ReadOne(s, &user.User{ID: 2})
-		assert.NoError(t, err)
-		assert.False(t, task.IsFavorite)
-	})
-}
-
-func Test_getTaskIndexFromSearchString(t *testing.T) {
-	type args struct {
-		s string
-	}
-	tests := []struct {
-		name      string
-		args      args
-		wantIndex int64
-	}{
-		{
-			name:      "task index in text",
-			args:      args{s: "Task #12"},
-			wantIndex: 12,
-		},
-		{
-			name:      "no task index",
-			args:      args{s: "Task"},
-			wantIndex: 0,
-		},
-		{
-			name:      "not numeric but with prefix",
-			args:      args{s: "Task #aaaaa"},
-			wantIndex: 0,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if gotIndex := getTaskIndexFromSearchString(tt.args.s); gotIndex != tt.wantIndex {
-				t.Errorf("getTaskIndexFromSearchString() = %v, want %v", gotIndex, tt.wantIndex)
-			}
-		})
-	}
 }

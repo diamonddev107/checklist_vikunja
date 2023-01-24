@@ -18,13 +18,13 @@ Vikunjs provides a simple abstraction to send notifications per mail and in the 
 
 Each notification has to implement this interface:
 
-{{< highlight golang >}}
+```golang
 type Notification interface {
     ToMail() *Mail
     ToDB() interface{}
     Name() string
 }
-{{< /highlight >}}
+```
 
 Both functions return the formatted messages for mail and database.
 
@@ -35,7 +35,7 @@ For example, if your notification should not be recorded in the database but onl
 
 A list of chainable functions is available to compose a mail:
 
-{{< highlight golang >}}
+```golang
 mail := NewMail(). 
     // The optional sender of the mail message.
     From("test@example.com").
@@ -54,7 +54,7 @@ mail := NewMail().
     Action("The Action", "https://example.com").
 	// Another line of text.
     Line("This should be an outro line").
-{{< /highlight >}}
+```
 
 If not provided, the `from` field of the mail contains the value configured in [`mailer.fromemail`](https://vikunja.io/docs/config-options/#fromemail).
 
@@ -75,14 +75,14 @@ It takes the name of the notification and the package where the notification wil
 Notifiables can receive a notification.
 A notifiable is defined with this interface:
 
-{{< highlight golang >}}
+```golang
 type Notifiable interface {
     // Should return the email address this notifiable has.
     RouteForMail() string
     // Should return the id of the notifiable entity
     RouteForDB() int64
 }
-{{< /highlight >}}
+```
 
 The `User` type from the `user` package implements this interface.
 
@@ -93,7 +93,7 @@ It takes a notifiable and a notification as input.
 
 For example, the email confirm notification when a new user registers is sent like this:
 
-{{< highlight golang >}}
+```golang
 n := &EmailConfirmNotification{
     User:  update.User,
     IsNew: false,
@@ -101,20 +101,13 @@ n := &EmailConfirmNotification{
 
 err = notifications.Notify(update.User, n)
 return
-{{< /highlight >}}
+```
 
 ## Testing
 
 The `mail` package provides a `Fake()` method which you should call in the `MainTest` functions of your package.
 If it was called, no mails are being sent and you can instead assert they have been sent with the `AssertSent` method.
 
-When testing, you should call the `notifications.Fake()` method in the `TestMain` function of the package you want to test.
-This prevents any notifications from being sent and lets you assert a notifications has been sent like this:
-
-{{< highlight golang >}}
-notifications.AssertSent(t, &ReminderDueNotification{})
-{{< /highlight >}}
-
 ## Example
 
-Take a look at the [pkg/user/notifications.go](https://code.vikunja.io/api/src/branch/main/pkg/user/notifications.go) file for a good example.
+Take a look at the [pkg/user/notifications.go](https://code.vikunja.io/api/src/branch/master/pkg/user/notifications.go) file for a good example.

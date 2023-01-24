@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
 	"code.vikunja.io/api/pkg/config"
@@ -34,7 +33,6 @@ import (
 )
 
 const apiScopes = `tasks.read tasks.read.shared`
-const apiPrefix = `https://graph.microsoft.com/v1.0/me/todo/`
 
 type Migration struct {
 	Code string `json:"code"`
@@ -94,7 +92,6 @@ type recurrence struct {
 
 type tasksResponse struct {
 	OdataContext string  `json:"@odata.context"`
-	Nextlink     string  `json:"@odata.nextLink"`
 	Value        []*task `json:"value"`
 }
 
@@ -181,7 +178,7 @@ func getMicrosoftGraphAuthToken(code string) (accessToken string, err error) {
 }
 
 func makeAuthenticatedGetRequest(token, urlPart string, v interface{}) error {
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, apiPrefix+urlPart, nil)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://graph.microsoft.com/v1.0/me/todo/"+urlPart, nil)
 	if err != nil {
 		return err
 	}
@@ -227,29 +224,16 @@ func getMicrosoftTodoData(token string) (microsoftTodoData []*list, err error) {
 	log.Debugf("[Microsoft Todo Migration] Got %d lists", len(lists.Value))
 
 	for _, list := range lists.Value {
-		link := "lists/" + list.ID + "/tasks"
-		list.Tasks = []*task{}
-
-		// Microsoft's Graph API has pagination, so we're going through all pages to get all tasks
-		for {
-			tr := &tasksResponse{}
-
-			err = makeAuthenticatedGetRequest(token, link, tr)
-			if err != nil {
-				log.Errorf("[Microsoft Todo Migration] Could not get tasks for list %s: %s", list.ID, err)
-				return
-			}
-
-			log.Debugf("[Microsoft Todo Migration] Got %d tasks for list %s", len(tr.Value), list.ID)
-
-			list.Tasks = append(list.Tasks, tr.Value...)
-
-			if tr.Nextlink == "" {
-				break
-			}
-
-			link = strings.ReplaceAll(tr.Nextlink, apiPrefix, "")
+		tasksResponse := &tasksResponse{}
+		err = makeAuthenticatedGetRequest(token, "lists/"+list.ID+"/tasks", tasksResponse)
+		if err != nil {
+			log.Errorf("[Microsoft Todo Migration] Could not get tasks for list %s: %s", list.ID, err)
+			return
 		}
+
+		log.Debugf("[Microsoft Todo Migration] Got %d tasks for list %s", len(tasksResponse.Value), list.ID)
+
+		list.Tasks = tasksResponse.Value
 
 		microsoftTodoData = append(microsoftTodoData, list)
 	}
@@ -259,15 +243,15 @@ func getMicrosoftTodoData(token string) (microsoftTodoData []*list, err error) {
 	return
 }
 
-func convertMicrosoftTodoData(todoData []*list) (vikunjsStructure []*models.NamespaceWithListsAndTasks, err error) {
+func convertMicrosoftTodoData(todoData []*list) (vikunjsStructure []*models.NamespaceWithLists, err error) {
 
 	// One namespace with all lists
-	vikunjsStructure = []*models.NamespaceWithListsAndTasks{
+	vikunjsStructure = []*models.NamespaceWithLists{
 		{
 			Namespace: models.Namespace{
 				Title: "Migrated from Microsoft Todo",
 			},
-			Lists: []*models.ListWithTasksAndBuckets{},
+			Lists: []*models.List{},
 		},
 	}
 
@@ -278,10 +262,8 @@ func convertMicrosoftTodoData(todoData []*list) (vikunjsStructure []*models.Name
 		log.Debugf("[Microsoft Todo Migration] Converting list %s", l.ID)
 
 		// Lists only with title
-		list := &models.ListWithTasksAndBuckets{
-			List: models.List{
-				Title: l.DisplayName,
-			},
+		list := &models.List{
+			Title: l.DisplayName,
 		}
 
 		log.Debugf("[Microsoft Todo Migration] Converting %d tasks", len(l.Tasks))
@@ -358,7 +340,7 @@ func convertMicrosoftTodoData(todoData []*list) (vikunjsStructure []*models.Name
 				}
 			}
 
-			list.Tasks = append(list.Tasks, &models.TaskWithComments{Task: *task})
+			list.Tasks = append(list.Tasks, task)
 			log.Debugf("[Microsoft Todo Migration] Done converted %d tasks", len(l.Tasks))
 		}
 

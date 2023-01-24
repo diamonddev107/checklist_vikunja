@@ -17,14 +17,9 @@
 package mail
 
 import (
-	"embed"
-	"io"
-
 	"code.vikunja.io/api/pkg/config"
 	"code.vikunja.io/api/pkg/log"
-	"code.vikunja.io/api/pkg/version"
-
-	"github.com/wneessen/go-mail"
+	"gopkg.in/gomail.v2"
 )
 
 // Opts holds infos for a mail
@@ -37,8 +32,6 @@ type Opts struct {
 	ContentType ContentType
 	Boundary    string
 	Headers     []*header
-	Embeds      map[string]io.Reader
-	EmbedFS     map[string]*embed.FS
 }
 
 // ContentType represents mail content types
@@ -52,11 +45,11 @@ const (
 )
 
 type header struct {
-	Field   mail.Header
+	Field   string
 	Content string
 }
 
-// SendTestMail sends a test mail to a recipient.
+// SendTestMail sends a test mail to a receipient.
 // It works without a queue.
 func SendTestMail(opts *Opts) error {
 	if config.MailerHost.GetString() == "" {
@@ -64,51 +57,39 @@ func SendTestMail(opts *Opts) error {
 		return nil
 	}
 
-	c, err := getClient()
+	d := getDialer()
+	s, err := d.Dial()
 	if err != nil {
 		return err
 	}
+	defer s.Close()
 
-	m := getMessage(opts)
+	m := sendMail(opts)
 
-	return c.DialAndSend(m)
+	return gomail.Send(s, m)
 }
 
-func getMessage(opts *Opts) *mail.Msg {
-	m := mail.NewMsg()
-	m.SetUserAgent("Vikunja " + version.Version)
+func sendMail(opts *Opts) *gomail.Message {
+	m := gomail.NewMessage()
 	if opts.From == "" {
-		opts.From = "Vikunja <" + config.MailerFromEmail.GetString() + ">"
+		opts.From = config.MailerFromEmail.GetString()
 	}
-	_ = m.From(opts.From)
-	_ = m.To(opts.To)
-	m.Subject(opts.Subject)
-
+	m.SetHeader("From", opts.From)
+	m.SetHeader("To", opts.To)
+	m.SetHeader("Subject", opts.Subject)
 	for _, h := range opts.Headers {
-		m.SetGenHeader(h.Field, h.Content)
-	}
-
-	for name, content := range opts.Embeds {
-		m.EmbedReader(name, content)
-	}
-
-	for name, fs := range opts.EmbedFS {
-		err := m.EmbedFromEmbedFS(name, fs)
-		if err != nil {
-			log.Errorf("Error embedding %s via embed.FS into mail: %v", err)
-		}
+		m.SetHeader(h.Field, h.Content)
 	}
 
 	switch opts.ContentType {
 	case ContentTypePlain:
-		m.SetBodyString("text/plain", opts.Message)
+		m.SetBody("text/plain", opts.Message)
 	case ContentTypeHTML:
-		m.SetBodyString("text/html", opts.Message)
+		m.SetBody("text/html", opts.Message)
 	case ContentTypeMultipart:
-		m.SetBodyString("text/plain", opts.Message)
-		m.AddAlternativeString("text/html", opts.HTMLMessage)
+		m.SetBody("text/plain", opts.Message)
+		m.AddAlternative("text/html", opts.HTMLMessage)
 	}
-
 	return m
 }
 
@@ -119,6 +100,6 @@ func SendMail(opts *Opts) {
 		return
 	}
 
-	m := getMessage(opts)
+	m := sendMail(opts)
 	Queue <- m
 }

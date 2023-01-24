@@ -20,15 +20,12 @@ import (
 	"errors"
 	"time"
 
-	"code.vikunja.io/api/pkg/db"
+	"golang.org/x/crypto/bcrypt"
 
 	"code.vikunja.io/api/pkg/user"
 	"code.vikunja.io/api/pkg/utils"
-
 	"code.vikunja.io/web"
-	"github.com/golang-jwt/jwt/v4"
-	"golang.org/x/crypto/bcrypt"
-	"xorm.io/builder"
+	"github.com/dgrijalva/jwt-go"
 	"xorm.io/xorm"
 )
 
@@ -123,7 +120,7 @@ func (share *LinkSharing) toUser() *user.User {
 // @Security JWTKeyAuth
 // @Param list path int true "List ID"
 // @Param label body models.LinkSharing true "The new link share object"
-// @Success 201 {object} models.LinkSharing "The created link share object."
+// @Success 200 {object} models.LinkSharing "The created link share object."
 // @Failure 400 {object} web.HTTPError "Invalid link share object provided."
 // @Failure 403 {object} web.HTTPError "Not allowed to add the list share."
 // @Failure 404 {object} web.HTTPError "The list does not exist."
@@ -209,14 +206,7 @@ func (share *LinkSharing) ReadAll(s *xorm.Session, a web.Auth, search string, pa
 
 	var shares []*LinkSharing
 	query := s.
-		Where(builder.And(
-			builder.Eq{"list_id": share.ListID},
-			builder.Or(
-				db.ILIKE("hash", search),
-				db.ILIKE("name", search),
-			),
-		))
-
+		Where("list_id = ? AND hash LIKE ?", share.ListID, "%"+search+"%")
 	if limit > 0 {
 		query = query.Limit(limit, start)
 	}

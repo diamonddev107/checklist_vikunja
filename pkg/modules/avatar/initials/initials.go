@@ -127,8 +127,7 @@ func getCacheKey(prefix string, keys ...int64) string {
 func getAvatarForUser(u *user.User) (fullSizeAvatar *image.RGBA64, err error) {
 	cacheKey := getCacheKey("full", u.ID)
 
-	fullSizeAvatar = &image.RGBA64{}
-	exists, err := keyvalue.GetWithValue(cacheKey, fullSizeAvatar)
+	a, exists, err := keyvalue.Get(cacheKey)
 	if err != nil {
 		return nil, err
 	}
@@ -146,6 +145,8 @@ func getAvatarForUser(u *user.User) (fullSizeAvatar *image.RGBA64, err error) {
 		if err != nil {
 			return nil, err
 		}
+	} else {
+		fullSizeAvatar = a.(*image.RGBA64)
 	}
 
 	return fullSizeAvatar, nil
@@ -155,7 +156,7 @@ func getAvatarForUser(u *user.User) (fullSizeAvatar *image.RGBA64, err error) {
 func (p *Provider) GetAvatar(u *user.User, size int64) (avatar []byte, mimeType string, err error) {
 	cacheKey := getCacheKey("resized", u.ID, size)
 
-	exists, err := keyvalue.GetWithValue(cacheKey, &avatar)
+	a, exists, err := keyvalue.Get(cacheKey)
 	if err != nil {
 		return nil, "", err
 	}
@@ -179,6 +180,7 @@ func (p *Provider) GetAvatar(u *user.User, size int64) (avatar []byte, mimeType 
 			return nil, "", err
 		}
 	} else {
+		avatar = a.([]byte)
 		log.Debugf("Serving initials avatar for user %d and size %d from cache", u.ID, size)
 	}
 

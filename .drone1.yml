@@ -1,0 +1,790 @@
+kind: pipeline
+name: testing
+
+workspace:
+  base: /go
+  path: src/code.vikunja.io/api
+
+services:
+  - name: test-mysql-unit
+    image: mariadb:10
+    environment:
+      MYSQL_ROOT_PASSWORD: vikunjatest
+      MYSQL_DATABASE: vikunjatest
+  - name: test-mysql-integration
+    image: mariadb:10
+    environment:
+      MYSQL_ROOT_PASSWORD: vikunjatest
+      MYSQL_DATABASE: vikunjatest
+  - name: test-mysql-migration
+    image: mariadb:10
+    environment:
+      MYSQL_ROOT_PASSWORD: vikunjatest
+      MYSQL_DATABASE: vikunjatest
+  - name: test-postgres-unit
+    image: postgres:12
+    environment:
+      POSTGRES_PASSWORD: vikunjatest
+      POSTGRES_DB: vikunjatest
+  - name: test-postgres-integration
+    image: postgres:12
+    environment:
+      POSTGRES_PASSWORD: vikunjatest
+      POSTGRES_DB: vikunjatest
+  - name: test-postgres-migration
+    image: postgres:12
+    environment:
+      POSTGRES_PASSWORD: vikunjatest
+      POSTGRES_DB: vikunjatest
+
+trigger:
+  branch:
+    include:
+      - main
+  event:
+    include:
+      - push
+      - pull_request
+
+steps:
+  - name: fetch-tags
+    image: docker:git
+    commands:
+      - git fetch --tags
+
+  # We're statically compiling the magefile to avoid race condition issues caused by multiple pipeline steps
+  # compiling the same magefile at the same time. It's also faster if each step does not need to compile it first.
+  - name: mage
+    image: vikunja/golang-build:latest
+    pull: true
+    environment:
+      GOPROXY: 'https://goproxy.kolaente.de'
+    commands:
+      - mage -compile ./mage-static
+      - env
+    when:
+      event: [ push, tag, pull_request ]
+
+  - name: build
+    image: vikunja/golang-build:latest
+    pull: true
+    environment:
+      GOPROXY: 'https://goproxy.kolaente.de'
+    depends_on: [ mage ]
+    commands:
+      - ./mage-static build:build
+    when:
+      event: [ push, tag, pull_request ]
+
+  - name: lint
+    image: vikunja/golang-build:latest
+    pull: true
+    environment:
+      GOPROXY: 'https://goproxy.kolaente.de'
+    depends_on: [ build ]
+    commands:
+      - wget -O - -q https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.31.0
+      - ./mage-static check:all
+    when:
+      event: [ push, tag, pull_request ]
+
+  - name: test-migration-prepare
+    image: kolaente/toolbox:latest
+    pull: true
+    commands:
+      # Get the latest version
+      - wget https://dl.vikunja.io/api/unstable/vikunja-unstable-linux-amd64-full.zip -q -O vikunja-latest.zip
+      - unzip vikunja-latest.zip vikunja-unstable-linux-amd64
+
+  - name: test-migration-sqlite
+    image: kolaente/toolbox:latest
+    pull: true
+    depends_on: [ test-migration-prepare, build ]
+    environment:
+      VIKUNJA_DATABASE_TYPE: sqlite
+      VIKUNJA_DATABASE_PATH: ./vikunja-migration-test.db
+      VIKUNJA_LOG_DATABASE: stdout
+      VIKUNJA_LOG_DATABASELEVEL: debug
+    commands:
+      - ./vikunja-unstable-linux-amd64 migrate
+      # Run the migrations from the binary build in the step before
+      - ./vikunja migrate
+    when:
+      event: [ push, tag, pull_request ]
+
+  - name: test-migration-mysql
+    image: kolaente/toolbox:latest
+    pull: true
+    depends_on: [ test-migration-prepare, build ]
+    environment:
+      VIKUNJA_DATABASE_TYPE: mysql
+      VIKUNJA_DATABASE_HOST: test-mysql-migration
+      VIKUNJA_DATABASE_USER: root
+      VIKUNJA_DATABASE_PASSWORD: vikunjatest
+      VIKUNJA_DATABASE_DATABASE: vikunjatest
+      VIKUNJA_LOG_DATABASE: stdout
+      VIKUNJA_LOG_DATABASELEVEL: debug
+    commands:
+      - ./vikunja-unstable-linux-amd64 migrate
+      # Run the migrations from the binary build in the step before
+      - ./vikunja migrate
+    when:
+      event: [ push, tag, pull_request ]
+
+  - name: test-migration-psql
+    image: kolaente/toolbox:latest
+    pull: true
+    depends_on: [ test-migration-prepare, build ]
+    environment:
+      VIKUNJA_DATABASE_TYPE: postgres
+      VIKUNJA_DATABASE_HOST: test-postgres-migration
+      VIKUNJA_DATABASE_USER: postgres
+      VIKUNJA_DATABASE_PASSWORD: vikunjatest
+      VIKUNJA_DATABASE_DATABASE: vikunjatest
+      VIKUNJA_DATABASE_SSLMODE: disable
+      VIKUNJA_LOG_DATABASE: stdout
+      VIKUNJA_LOG_DATABASELEVEL: debug
+    commands:
+      - ./vikunja-unstable-linux-amd64 migrate
+      # Run the migrations from the binary build in the step before
+      - ./vikunja migrate
+    when:
+      event: [ push, tag, pull_request ]
+
+  - name: test
+    image: vikunja/golang-build:latest
+    pull: true
+    environment:
+      GOPROXY: 'https://goproxy.kolaente.de'
+    commands:
+      - ./mage-static test:unit
+    depends_on: [ fetch-tags, mage ]
+    when:
+      event: [ push, tag, pull_request ]
+
+  - name: test-sqlite
+    image: vikunja/golang-build:latest
+    pull: true
+    environment:
+      GOPROXY: 'https://goproxy.kolaente.de'
+      VIKUNJA_TESTS_USE_CONFIG: 1
+      VIKUNJA_DATABASE_TYPE: sqlite
+    commands:
+      - ./mage-static test:unit
+    depends_on: [ fetch-tags, mage ]
+    when:
+      event: [ push, tag, pull_request ]
+
+  - name: test-mysql
+    image: vikunja/golang-build:latest
+    pull: true
+    environment:
+      GOPROXY: 'https://goproxy.kolaente.de'
+      VIKUNJA_TESTS_USE_CONFIG: 1
+      VIKUNJA_DATABASE_TYPE: mysql
+      VIKUNJA_DATABASE_HOST: test-mysql-unit
+      VIKUNJA_DATABASE_USER: root
+      VIKUNJA_DATABASE_PASSWORD: vikunjatest
+      VIKUNJA_DATABASE_DATABASE: vikunjatest
+    commands:
+      - ./mage-static test:unit
+    depends_on: [ fetch-tags, mage ]
+    when:
+      event: [ push, tag, pull_request ]
+
+  - name: test-postgres
+    image: vikunja/golang-build:latest
+    pull: true
+    environment:
+      GOPROXY: 'https://goproxy.kolaente.de'
+      VIKUNJA_TESTS_USE_CONFIG: 1
+      VIKUNJA_DATABASE_TYPE: postgres
+      VIKUNJA_DATABASE_HOST: test-postgres-unit
+      VIKUNJA_DATABASE_USER: postgres
+      VIKUNJA_DATABASE_PASSWORD: vikunjatest
+      VIKUNJA_DATABASE_DATABASE: vikunjatest
+      VIKUNJA_DATABASE_SSLMODE: disable
+    commands:
+      - ./mage-static test:unit
+    depends_on: [ fetch-tags, mage ]
+    when:
+      event: [ push, tag, pull_request ]
+
+  - name: integration-test
+    image: vikunja/golang-build:latest
+    pull: true
+    environment:
+      GOPROXY: 'https://goproxy.kolaente.de'
+    commands:
+      - ./mage-static test:integration
+    depends_on: [ fetch-tags, mage ]
+    when:
+      event: [ push, tag, pull_request ]
+
+  - name: integration-test-sqlite
+    image: vikunja/golang-build:latest
+    pull: true
+    environment:
+      GOPROXY: 'https://goproxy.kolaente.de'
+      VIKUNJA_TESTS_USE_CONFIG: 1
+      VIKUNJA_DATABASE_TYPE: sqlite
+    commands:
+      - ./mage-static test:integration
+    depends_on: [ fetch-tags, mage ]
+    when:
+      event: [ push, tag, pull_request ]
+
+  - name: integration-test-mysql
+    image: vikunja/golang-build:latest
+    pull: true
+    environment:
+      GOPROXY: 'https://goproxy.kolaente.de'
+      VIKUNJA_TESTS_USE_CONFIG: 1
+      VIKUNJA_DATABASE_TYPE: mysql
+      VIKUNJA_DATABASE_HOST: test-mysql-integration
+      VIKUNJA_DATABASE_USER: root
+      VIKUNJA_DATABASE_PASSWORD: vikunjatest
+      VIKUNJA_DATABASE_DATABASE: vikunjatest
+    commands:
+      - ./mage-static test:integration
+    depends_on: [ fetch-tags, mage ]
+    when:
+      event: [ push, tag, pull_request ]
+
+  - name: integration-test-postgres
+    image: vikunja/golang-build:latest
+    pull: true
+    environment:
+      GOPROXY: 'https://goproxy.kolaente.de'
+      VIKUNJA_TESTS_USE_CONFIG: 1
+      VIKUNJA_DATABASE_TYPE: postgres
+      VIKUNJA_DATABASE_HOST: test-postgres-integration
+      VIKUNJA_DATABASE_USER: postgres
+      VIKUNJA_DATABASE_PASSWORD: vikunjatest
+      VIKUNJA_DATABASE_DATABASE: vikunjatest
+      VIKUNJA_DATABASE_SSLMODE: disable
+    commands:
+      - ./mage-static test:integration
+    depends_on: [ fetch-tags, mage ]
+    when:
+      event: [ push, tag, pull_request ]
+
+---
+########
+# Build a release when tagging
+########
+
+kind: pipeline
+name: release
+
+depends_on:
+  - testing
+
+workspace:
+  base: /go
+  path: src/code.vikunja.io/api
+
+trigger:
+  ref:
+    - refs/heads/main
+    - "refs/tags/**"
+
+steps:
+  # Needed to get the versions right as they depend on tags
+  - name: fetch-tags
+    image: docker:git
+    commands:
+      - git fetch --tags
+
+  # We're statically compiling the magefile to avoid race condition issues caused by multiple pipeline steps
+  # compiling the same magefile at the same time. It's also faster if each step does not need to compile it first.
+  - name: mage
+    image: vikunja/golang-build:latest
+    pull: true
+    environment:
+      GOPROXY: 'https://goproxy.kolaente.de'
+    commands:
+      - mage -compile ./mage-static
+    when:
+      event: [ push, tag, pull_request ]
+
+  - name: before-static-build
+    image: techknowlogick/xgo:latest
+    pull: true
+    commands:
+      - export PATH=$PATH:$GOPATH/bin
+      - go install github.com/magefile/mage
+      - ./mage-static release:dirs
+    depends_on: [ fetch-tags, mage ]
+
+  - name: static-build-windows
+    image: techknowlogick/xgo:latest
+    pull: true
+    environment:
+      # This path does not exist. However, when we set the gopath to /go, the build fails. Not sure why.
+      # Leaving this here until we know how to resolve this properly.
+      GOPATH: /srv/app
+    commands:
+      - export PATH=$PATH:$GOPATH/bin
+      - go install github.com/magefile/mage
+      - ./mage-static release:windows
+    depends_on: [ before-static-build ]
+
+  - name: static-build-linux
+    image: techknowlogick/xgo:latest
+    pull: true
+    environment:
+      # This path does not exist. However, when we set the gopath to /go, the build fails. Not sure why.
+      # Leaving this here until we know how to resolve this properly.
+      GOPATH: /srv/app
+    commands:
+      - export PATH=$PATH:$GOPATH/bin
+      - go install github.com/magefile/mage
+      - ./mage-static release:linux
+    depends_on: [ before-static-build ]
+
+  - name: static-build-darwin
+    image: techknowlogick/xgo:latest
+    pull: true
+    environment:
+      # This path does not exist. However, when we set the gopath to /go, the build fails. Not sure why.
+      # Leaving this here until we know how to resolve this properly.
+      GOPATH: /srv/app
+    commands:
+      - export PATH=$PATH:$GOPATH/bin
+      - go install github.com/magefile/mage
+      - ./mage-static release:darwin
+    depends_on: [ before-static-build ]
+
+  - name: after-build-compress
+    image: kolaente/upx
+    pull: true
+    depends_on:
+      - static-build-windows
+      - static-build-linux
+      - static-build-darwin
+    commands:
+      - ./mage-static release:compress
+
+  - name: after-build-static
+    image: techknowlogick/xgo:latest
+    pull: true
+    depends_on:
+      - after-build-compress
+    commands:
+      - go install github.com/magefile/mage
+      - ./mage-static release:copy
+      - ./mage-static release:check
+      - ./mage-static release:os-package
+      - ./mage-static release:zip
+
+  - name: sign-release
+    image: plugins/gpgsign:1
+    pull: true
+    depends_on: [ after-build-static ]
+    settings:
+      key:
+        from_secret: gpg_privkey
+      passphrase:
+        from_secret: gpg_password
+      files:
+        - dist/zip/*
+      detach_sign: true
+
+  # Push the releases to our pseudo-s3-bucket
+  - name: release-latest
+    image: plugins/s3:1
+    pull: true
+    settings:
+      bucket: vikunja-releases
+      access_key:
+        from_secret: aws_access_key_id
+      secret_key:
+        from_secret: aws_secret_access_key
+      endpoint: https://s3.fr-par.scw.cloud
+      region: fr-par
+      path_style: true
+      strip_prefix: dist/zip/
+      source: dist/zip/*
+      target: /api/unstable/
+    when:
+      branch:
+        - main
+      event:
+        - push
+    depends_on: [ sign-release ]
+
+  - name: release-version
+    image: plugins/s3:1
+    pull: true
+    settings:
+      bucket: vikunja-releases
+      access_key:
+        from_secret: aws_access_key_id
+      secret_key:
+        from_secret: aws_secret_access_key
+      endpoint: https://s3.fr-par.scw.cloud
+      region: fr-par
+      path_style: true
+      strip_prefix: dist/zip/
+      source: dist/zip/*
+      target: /api/${DRONE_TAG##v}/
+    when:
+      event:
+        - tag
+    depends_on: [ sign-release ]
+
+  # Build os packages and push it to our bucket
+  - name: build-os-packages
+    image: goreleaser/nfpm
+    pull: true
+    commands:
+      - apk add git go
+      - ./mage-static release:packages
+      - mv dist/os-packages/vikunja*.x86_64.rpm dist/os-packages/vikunja-unstable-x86_64.rpm
+      - mv dist/os-packages/vikunja*_amd64.deb dist/os-packages/vikunja-unstable-amd64.deb
+      - mv dist/os-packages/vikunja*_x86_64.apk dist/os-packages/vikunja-unstable-x86_64.apk
+    depends_on: [ static-build-linux ]
+
+  # Push the os releases to our pseudo-s3-bucket
+  - name: release-os-latest
+    image: plugins/s3:1
+    pull: true
+    settings:
+      bucket: vikunja-releases
+      access_key:
+        from_secret: aws_access_key_id
+      secret_key:
+        from_secret: aws_secret_access_key
+      endpoint: https://s3.fr-par.scw.cloud
+      region: fr-par
+      path_style: true
+      strip_prefix: dist/os-packages/
+      source: dist/os-packages/*
+      target: /api/unstable/
+    when:
+      branch:
+        - main
+      event:
+        - push
+    depends_on: [ build-os-packages ]
+
+  - name: release-os-version
+    image: plugins/s3:1
+    pull: true
+    settings:
+      bucket: vikunja-releases
+      access_key:
+        from_secret: aws_access_key_id
+      secret_key:
+        from_secret: aws_secret_access_key
+      endpoint: https://s3.fr-par.scw.cloud
+      region: fr-par
+      path_style: true
+      strip_prefix: dist/os-packages/
+      source: dist/os-packages/*
+      target: /api/${DRONE_TAG##v}/
+    when:
+      event:
+        - tag
+    depends_on: [ build-os-packages ]
+
+  ### Broken, disabled until we figure out how to fix it
+  #  - name: deb-structure
+  #    image: kolaente/reprepro
+  #    pull: true
+  #    environment:
+  #      GPG_PRIVATE_KEY:
+  #        from_secret: gpg_privatekey
+  #    commands:
+  #      - export GPG_TTY=$(tty)
+  #      - gpg -qk
+  #      - echo "use-agent" >>  ~/.gnupg/gpg.conf
+  #      - gpgconf --kill gpg-agent
+  #      - echo $GPG_PRIVATE_KEY > ~/frederik.gpg
+  #      - gpg --import ~/frederik.gpg
+  #      - mkdir debian/conf -p
+  #      - cp build/reprepro-dist-conf debian/conf/distributions
+  #      - ./mage-static release:reprepro
+  #    depends_on: [ build-os-packages ]
+
+  # Push the releases to our pseudo-s3-bucket
+  - name: release-deb
+    image: plugins/s3:1
+    pull: true
+    settings:
+      bucket: vikunja-releases
+      access_key:
+        from_secret: aws_access_key_id
+      secret_key:
+        from_secret: aws_secret_access_key
+      endpoint: https://s3.fr-par.scw.cloud
+      region: fr-par
+      path_style: true
+      strip_prefix: debian
+      source: debian/*/*/*/*/*
+      target: /deb/
+#    depends_on: [ deb-structure ]
+
+---
+kind: pipeline
+name: deploy-docs
+
+workspace:
+  base: /go
+  path: src/code.vikunja.io/api
+
+clone:
+  depth: 50
+
+trigger:
+  event:
+    - push
+  branch:
+    - main
+
+steps:
+  - name: theme
+    image: kolaente/toolbox
+    pull: true
+    group: build-static
+    commands:
+      - mkdir docs/themes/vikunja -p
+      - cd docs/themes/vikunja
+      - wget https://dl.vikunja.io/theme/vikunja-theme.tar.gz
+      - tar -xzf vikunja-theme.tar.gz
+
+  - name: build
+    image: monachus/hugo:v0.54.0
+    pull: true
+    commands:
+      - cd docs
+      - hugo
+      - mv public/docs/* public # Hugo seems to be not capable of setting a different theme for a home page, so we do this ugly hack to fix it.
+
+  - name: docker
+    image: plugins/docker
+    pull: true
+    settings:
+      username:
+        from_secret: docker_username
+      password:
+        from_secret: docker_password
+      repo: vikunja/docs
+      context: docs/
+      dockerfile: docs/Dockerfile
+
+---
+kind: pipeline
+type: docker
+name: docker-arm-release
+
+depends_on:
+  - testing
+
+platform:
+  os: linux
+  arch: arm64
+
+trigger:
+  ref:
+    - refs/heads/main
+    - "refs/tags/**"
+
+steps:
+  - name: fetch-tags
+    image: docker:git
+    commands:
+      - git fetch --tags
+  - name: docker-arm-latest
+    image: plugins/docker:linux-arm
+    pull: true
+    settings:
+      username:
+        from_secret: docker_username
+      password:
+        from_secret: docker_password
+      repo: vikunja/api
+      tags: latest-linux-arm
+    depends_on: [ fetch-tags ]
+    when:
+      ref:
+        - refs/heads/main
+
+  - name: docker-arm
+    image: plugins/docker:linux-arm
+    pull: true
+    settings:
+      username:
+        from_secret: docker_username
+      password:
+        from_secret: docker_password
+      repo: vikunja/api
+      auto_tag: true
+      auto_tag_suffix: linux-arm
+    depends_on: [ fetch-tags ]
+    when:
+      ref:
+        - "refs/tags/**"
+
+  - name: docker-arm64-latest
+    image: plugins/docker:linux-arm64
+    pull: true
+    settings:
+      username:
+        from_secret: docker_username
+      password:
+        from_secret: docker_password
+      repo: vikunja/api
+      tags: latest-linux-arm64
+    depends_on: [ fetch-tags ]
+    when:
+      ref:
+        - refs/heads/main
+
+  - name: docker-arm64
+    image: plugins/docker:linux-arm64
+    pull: true
+    settings:
+      username:
+        from_secret: docker_username
+      password:
+        from_secret: docker_password
+      repo: vikunja/api
+      auto_tag: true
+      auto_tag_suffix: linux-arm64
+    depends_on: [ fetch-tags ]
+    when:
+      ref:
+        - "refs/tags/**"
+
+---
+kind: pipeline
+type: docker
+name: docker-amd64-release
+
+depends_on:
+  - testing
+
+platform:
+  os: linux
+  arch: amd64
+
+trigger:
+  ref:
+    - refs/heads/main
+    - "refs/tags/**"
+
+steps:
+  - name: fetch-tags
+    image: docker:git
+    commands:
+      - git fetch --tags
+  - name: docker-latest
+    image: plugins/docker:linux-amd64
+    pull: true
+    settings:
+      username:
+        from_secret: docker_username
+      password:
+        from_secret: docker_password
+      repo: vikunja/api
+      tags: latest-linux-amd64
+    depends_on: [ fetch-tags ]
+    when:
+      ref:
+        - refs/heads/main
+
+  - name: docker
+    image: plugins/docker:linux-amd64
+    pull: true
+    settings:
+      username:
+        from_secret: docker_username
+      password:
+        from_secret: docker_password
+      repo: vikunja/api
+      auto_tag: true
+      auto_tag_suffix: linux-amd64
+    depends_on: [ fetch-tags ]
+    when:
+      ref:
+        - "refs/tags/**"
+
+---
+kind: pipeline
+type: docker
+name: docker-manifest
+
+trigger:
+  ref:
+    - refs/heads/main
+    - "refs/tags/**"
+
+depends_on:
+  - docker-amd64-release
+  - docker-arm-release
+
+steps:
+  - name: manifest-latest
+    pull: always
+    image: plugins/manifest
+    settings:
+      tags: latest
+      ignore_missing: true
+      spec: docker-manifest-latest.tmpl
+      password:
+        from_secret: docker_password
+      username:
+        from_secret: docker_username
+    when:
+      ref:
+        - refs/heads/main
+
+  - name: manifest
+    pull: always
+    image: plugins/manifest
+    settings:
+      auto_tag: true
+      ignore_missing: true
+      spec: docker-manifest.tmpl
+      password:
+        from_secret: docker_password
+      username:
+        from_secret: docker_username
+    when:
+      ref:
+        - "refs/tags/**"
+
+---
+kind: pipeline
+type: docker
+name: notify
+
+trigger:
+  ref:
+    - refs/heads/main
+    - "refs/tags/**"
+
+depends_on:
+  - testing
+  - release
+  - deploy-docs
+  - docker-arm-release
+  - docker-amd64-release
+  - docker-manifest
+
+steps:
+  - name: notify
+    image: plugins/matrix
+    settings:
+      homeserver: https://matrix.org
+      roomid: WqBDCxzghKcNflkErL:matrix.org
+      username:
+        from_secret: matrix_username
+      password:
+        from_secret: matrix_password
+    when:
+      status:
+        - success
+        - failure

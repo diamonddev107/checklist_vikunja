@@ -20,17 +20,18 @@ import (
 	"code.vikunja.io/api/pkg/config"
 	"code.vikunja.io/api/pkg/events"
 	"code.vikunja.io/api/pkg/notifications"
+	"code.vikunja.io/api/pkg/utils"
 	"golang.org/x/crypto/bcrypt"
 	"xorm.io/xorm"
 )
 
-const IssuerLocal = `local`
+const issuerLocal = `local`
 
 // CreateUser creates a new user and inserts it into the database
 func CreateUser(s *xorm.Session, user *User) (newUser *User, err error) {
 
 	if user.Issuer == "" {
-		user.Issuer = IssuerLocal
+		user.Issuer = issuerLocal
 	}
 
 	// Check if we have all needed information
@@ -45,7 +46,7 @@ func CreateUser(s *xorm.Session, user *User) (newUser *User, err error) {
 		return nil, err
 	}
 
-	if user.Issuer == IssuerLocal {
+	if user.Issuer == issuerLocal {
 		// Hash the password
 		user.Password, err = HashPassword(user.Password)
 		if err != nil {
@@ -53,18 +54,15 @@ func CreateUser(s *xorm.Session, user *User) (newUser *User, err error) {
 		}
 	}
 
-	user.Status = StatusActive
-	user.AvatarProvider = config.DefaultSettingsAvatarProvider.GetString()
-	user.AvatarFileID = config.DefaultSettingsAvatarFileID.GetInt64()
-	user.EmailRemindersEnabled = config.DefaultSettingsEmailRemindersEnabled.GetBool()
-	user.DiscoverableByName = config.DefaultSettingsDiscoverableByName.GetBool()
-	user.DiscoverableByEmail = config.DefaultSettingsDiscoverableByEmail.GetBool()
-	user.OverdueTasksRemindersEnabled = config.DefaultSettingsOverdueTaskRemindersEnabled.GetBool()
-	user.OverdueTasksRemindersTime = config.DefaultSettingsOverdueTaskRemindersTime.GetString()
-	user.DefaultListID = config.DefaultSettingsDefaultListID.GetInt64()
-	user.WeekStart = config.DefaultSettingsWeekStart.GetInt()
-	user.Language = config.DefaultSettingsLanguage.GetString()
-	user.Timezone = config.DefaultSettingsTimezone.GetString()
+	user.IsActive = true
+	if config.MailerEnabled.GetBool() && user.Issuer == issuerLocal {
+		// The new user should not be activated until it confirms his mail address
+		user.IsActive = false
+		// Generate a confirm token
+		user.EmailConfirmToken = utils.MakeRandomString(60)
+	}
+
+	user.AvatarProvider = "initials"
 
 	// Insert it
 	_, err = s.Insert(user)
@@ -86,28 +84,13 @@ func CreateUser(s *xorm.Session, user *User) (newUser *User, err error) {
 	}
 
 	// Dont send a mail if no mailer is configured
-	if !config.MailerEnabled.GetBool() || user.Issuer != IssuerLocal {
+	if !config.MailerEnabled.GetBool() {
 		return newUserOut, err
 	}
 
-	user.Status = StatusEmailConfirmationRequired
-	token, err := generateToken(s, user, TokenEmailConfirm)
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = s.
-		Where("id = ?", user.ID).
-		Cols("email", "is_active").
-		Update(user)
-	if err != nil {
-		return
-	}
-
 	n := &EmailConfirmNotification{
-		User:         user,
-		IsNew:        true,
-		ConfirmToken: token.Token,
+		User:  user,
+		IsNew: false,
 	}
 
 	err = notifications.Notify(user, n)
@@ -122,8 +105,8 @@ func HashPassword(password string) (string, error) {
 
 func checkIfUserIsValid(user *User) error {
 	if user.Email == "" ||
-		(user.Issuer != IssuerLocal && user.Subject == "") ||
-		(user.Issuer == IssuerLocal && (user.Password == "" ||
+		(user.Issuer != issuerLocal && user.Subject == "") ||
+		(user.Issuer == issuerLocal && (user.Password == "" ||
 			user.Username == "")) {
 		return ErrNoUsernamePassword{}
 	}
@@ -153,7 +136,7 @@ func checkIfUserExists(s *xorm.Session, user *User) (err error) {
 		Subject: user.Subject,
 	}
 
-	if user.Issuer != IssuerLocal {
+	if user.Issuer != issuerLocal {
 		userToCheck.Email = ""
 	}
 
@@ -165,7 +148,7 @@ func checkIfUserExists(s *xorm.Session, user *User) (err error) {
 			return err
 		}
 	}
-	if exists && user.Issuer == IssuerLocal {
+	if exists && user.Issuer == issuerLocal {
 		return ErrUserEmailExists{user.ID, user.Email}
 	}
 

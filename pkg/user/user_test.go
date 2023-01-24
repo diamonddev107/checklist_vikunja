@@ -20,9 +20,7 @@ import (
 	"testing"
 
 	"code.vikunja.io/api/pkg/db"
-
 	"github.com/stretchr/testify/assert"
-	"xorm.io/builder"
 )
 
 func TestCreateUser(t *testing.T) {
@@ -324,6 +322,7 @@ func TestUpdateUser(t *testing.T) {
 }
 
 func TestUpdateUserPassword(t *testing.T) {
+
 	t.Run("normal", func(t *testing.T) {
 		db.LoadAndAssertFixtures(t)
 		s := db.NewSession()
@@ -364,17 +363,7 @@ func TestListUsers(t *testing.T) {
 		s := db.NewSession()
 		defer s.Close()
 
-		all, err := ListUsers(s, "user1", nil)
-		assert.NoError(t, err)
-		assert.True(t, len(all) > 0)
-		assert.Equal(t, all[0].Username, "user1")
-	})
-	t.Run("case insensitive", func(t *testing.T) {
-		db.LoadAndAssertFixtures(t)
-		s := db.NewSession()
-		defer s.Close()
-
-		all, err := ListUsers(s, "uSEr1", nil)
+		all, err := ListUsers(s, "user1")
 		assert.NoError(t, err)
 		assert.True(t, len(all) > 0)
 		assert.Equal(t, all[0].Username, "user1")
@@ -393,7 +382,7 @@ func TestListUsers(t *testing.T) {
 		s := db.NewSession()
 		defer s.Close()
 
-		all, err := ListUsers(s, "", nil)
+		all, err := ListUsers(s, "")
 		assert.NoError(t, err)
 		assert.Len(t, all, 0)
 	})
@@ -402,12 +391,11 @@ func TestListUsers(t *testing.T) {
 		s := db.NewSession()
 		defer s.Close()
 
-		all, err := ListUsers(s, "user1@example.com", nil)
+		all, err := ListUsers(s, "user1@example.com")
 		assert.NoError(t, err)
 		assert.Len(t, all, 0)
 		db.AssertExists(t, "users", map[string]interface{}{
-			"email":                 "user1@example.com",
-			"discoverable_by_email": false,
+			"email": "user1@example.com",
 		}, false)
 	})
 	t.Run("not discoverable by name", func(t *testing.T) {
@@ -415,12 +403,11 @@ func TestListUsers(t *testing.T) {
 		s := db.NewSession()
 		defer s.Close()
 
-		all, err := ListUsers(s, "one else", nil)
+		all, err := ListUsers(s, "one else")
 		assert.NoError(t, err)
 		assert.Len(t, all, 0)
 		db.AssertExists(t, "users", map[string]interface{}{
-			"name":                 "Some one else",
-			"discoverable_by_name": false,
+			"name": "Some one else",
 		}, false)
 	})
 	t.Run("discoverable by email", func(t *testing.T) {
@@ -428,67 +415,20 @@ func TestListUsers(t *testing.T) {
 		s := db.NewSession()
 		defer s.Close()
 
-		all, err := ListUsers(s, "user7@example.com", nil)
+		all, err := ListUsers(s, "user7@example.com")
 		assert.NoError(t, err)
 		assert.Len(t, all, 1)
 		assert.Equal(t, int64(7), all[0].ID)
-		db.AssertExists(t, "users", map[string]interface{}{
-			"email":                 "user7@example.com",
-			"discoverable_by_email": true,
-		}, false)
 	})
 	t.Run("discoverable by partial name", func(t *testing.T) {
 		db.LoadAndAssertFixtures(t)
 		s := db.NewSession()
 		defer s.Close()
 
-		all, err := ListUsers(s, "with space", nil)
+		all, err := ListUsers(s, "with space")
 		assert.NoError(t, err)
 		assert.Len(t, all, 1)
 		assert.Equal(t, int64(12), all[0].ID)
-		db.AssertExists(t, "users", map[string]interface{}{
-			"name":                 "Name with spaces",
-			"discoverable_by_name": true,
-		}, false)
-	})
-	t.Run("discoverable by email with extra condition", func(t *testing.T) {
-		db.LoadAndAssertFixtures(t)
-		s := db.NewSession()
-		defer s.Close()
-
-		all, err := ListUsers(s, "user7@example.com", &ListUserOpts{AdditionalCond: builder.In("id", 7)})
-		assert.NoError(t, err)
-		assert.Len(t, all, 1)
-		assert.Equal(t, int64(7), all[0].ID)
-		db.AssertExists(t, "users", map[string]interface{}{
-			"email":                 "user7@example.com",
-			"discoverable_by_email": true,
-		}, false)
-	})
-	t.Run("discoverable by exact username", func(t *testing.T) {
-		db.LoadAndAssertFixtures(t)
-		s := db.NewSession()
-		defer s.Close()
-
-		all, err := ListUsers(s, "user7", nil)
-		assert.NoError(t, err)
-		assert.Len(t, all, 1)
-		assert.Equal(t, int64(7), all[0].ID)
-		db.AssertExists(t, "users", map[string]interface{}{
-			"username": "user7",
-		}, false)
-	})
-	t.Run("not discoverable by partial username", func(t *testing.T) {
-		db.LoadAndAssertFixtures(t)
-		s := db.NewSession()
-		defer s.Close()
-
-		all, err := ListUsers(s, "user", nil)
-		assert.NoError(t, err)
-		assert.Len(t, all, 0)
-		db.AssertExists(t, "users", map[string]interface{}{
-			"username": "user7",
-		}, false)
 	})
 }
 

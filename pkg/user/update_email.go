@@ -19,6 +19,7 @@ package user
 import (
 	"code.vikunja.io/api/pkg/config"
 	"code.vikunja.io/api/pkg/notifications"
+	"code.vikunja.io/api/pkg/utils"
 	"xorm.io/xorm"
 )
 
@@ -51,35 +52,26 @@ func UpdateEmail(s *xorm.Session, update *EmailUpdate) (err error) {
 		return
 	}
 
+	update.User.IsActive = false
 	update.User.Email = update.NewEmail
-
-	// Send the confirmation mail
-	if !config.MailerEnabled.GetBool() {
-		_, err = s.
-			Where("id = ?", update.User.ID).
-			Cols("email").
-			Update(update.User)
-		return
-	}
-
-	update.User.Status = StatusEmailConfirmationRequired
-	token, err := generateToken(s, update.User, TokenEmailConfirm)
-	if err != nil {
-		return
-	}
+	update.User.EmailConfirmToken = utils.MakeRandomString(64)
 	_, err = s.
 		Where("id = ?", update.User.ID).
-		Cols("email", "is_active"). // TODO: Status change
+		Cols("email", "is_active", "email_confirm_token").
 		Update(update.User)
 	if err != nil {
 		return
 	}
 
+	// Send the confirmation mail
+	if !config.MailerEnabled.GetBool() {
+		return
+	}
+
 	// Send the user a mail with a link to confirm the mail
 	n := &EmailConfirmNotification{
-		User:         update.User,
-		IsNew:        false,
-		ConfirmToken: token.Token,
+		User:  update.User,
+		IsNew: false,
 	}
 
 	err = notifications.Notify(update.User, n)

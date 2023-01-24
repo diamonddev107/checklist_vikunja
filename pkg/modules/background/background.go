@@ -24,10 +24,9 @@ import (
 
 // Image represents an image which can be used as a list background
 type Image struct {
-	ID       string `json:"id"`
-	URL      string `json:"url"`
-	Thumb    string `json:"thumb,omitempty"`
-	BlurHash string `json:"blur_hash"`
+	ID    string `json:"id"`
+	URL   string `json:"url"`
+	Thumb string `json:"thumb,omitempty"`
 	// This can be used to supply extra information from an image provider to clients
 	Info interface{} `json:"info,omitempty"`
 }

@@ -4,4 +4,4 @@
 usermod --non-unique --uid ${PUID} vikunja
 groupmod --non-unique --gid ${PGID} vikunja
 
-exec su vikunja -c '/app/vikunja/vikunja'
+su vikunja -c '/app/vikunja/vikunja'

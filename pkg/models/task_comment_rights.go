@@ -27,36 +27,16 @@ func (tc *TaskComment) CanRead(s *xorm.Session, a web.Auth) (bool, int, error) {
 	return t.CanRead(s, a)
 }
 
-func (tc *TaskComment) canUserModifyTaskComment(s *xorm.Session, a web.Auth) (bool, error) {
-	t := Task{ID: tc.TaskID}
-	canWriteTask, err := t.CanWrite(s, a)
-	if err != nil {
-		return false, err
-	}
-	if !canWriteTask {
-		return false, nil
-	}
-
-	savedComment := &TaskComment{
-		ID:     tc.ID,
-		TaskID: tc.TaskID,
-	}
-	err = getTaskCommentSimple(s, savedComment)
-	if err != nil {
-		return false, err
-	}
-
-	return a.GetID() == savedComment.AuthorID, nil
-}
-
 // CanDelete checks if a user can delete a comment
 func (tc *TaskComment) CanDelete(s *xorm.Session, a web.Auth) (bool, error) {
-	return tc.canUserModifyTaskComment(s, a)
+	t := Task{ID: tc.TaskID}
+	return t.CanWrite(s, a)
 }
 
 // CanUpdate checks if a user can update a comment
 func (tc *TaskComment) CanUpdate(s *xorm.Session, a web.Auth) (bool, error) {
-	return tc.canUserModifyTaskComment(s, a)
+	t := Task{ID: tc.TaskID}
+	return t.CanWrite(s, a)
 }
 
 // CanCreate checks if a user can create a new comment

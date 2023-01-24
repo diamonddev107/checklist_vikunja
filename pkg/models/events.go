@@ -21,16 +21,6 @@ import (
 	"code.vikunja.io/web"
 )
 
-// DataExportRequestEvent represents a DataExportRequestEvent event
-type DataExportRequestEvent struct {
-	User *user.User
-}
-
-// Name defines the name for DataExportRequestEvent
-func (t *DataExportRequestEvent) Name() string {
-	return "user.export.request"
-}
-
 /////////////////
 // Task Events //
 /////////////////
@@ -90,18 +80,6 @@ type TaskCommentCreatedEvent struct {
 // Name defines the name for TaskCommentCreatedEvent
 func (t *TaskCommentCreatedEvent) Name() string {
 	return "task.comment.created"
-}
-
-// TaskCommentUpdatedEvent represents a TaskCommentUpdatedEvent event
-type TaskCommentUpdatedEvent struct {
-	Task    *Task
-	Comment *TaskComment
-	Doer    *user.User
-}
-
-// Name defines the name for TaskCommentUpdatedEvent
-func (t *TaskCommentUpdatedEvent) Name() string {
-	return "task.comment.edited"
 }
 
 //////////////////////
@@ -266,14 +244,4 @@ type TeamDeletedEvent struct {
 // Name defines the name for TeamDeletedEvent
 func (t *TeamDeletedEvent) Name() string {
 	return "team.deleted"
-}
-
-// UserDataExportRequestedEvent represents a UserDataExportRequestedEvent event
-type UserDataExportRequestedEvent struct {
-	User *user.User
-}
-
-// Name defines the name for UserDataExportRequestedEvent
-func (t *UserDataExportRequestedEvent) Name() string {
-	return "user.export.requested"
 }

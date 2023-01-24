@@ -24,8 +24,7 @@ import (
 	"code.vikunja.io/api/pkg/models"
 	"code.vikunja.io/api/pkg/user"
 	"code.vikunja.io/web"
-
-	"github.com/golang-jwt/jwt/v4"
+	"github.com/dgrijalva/jwt-go"
 	"github.com/labstack/echo/v4"
 )
 
@@ -42,8 +41,8 @@ type Token struct {
 }
 
 // NewUserAuthTokenResponse creates a new user auth token response from a user object.
-func NewUserAuthTokenResponse(u *user.User, c echo.Context, long bool) error {
-	t, err := NewUserJWTAuthtoken(u, long)
+func NewUserAuthTokenResponse(u *user.User, c echo.Context) error {
+	t, err := NewUserJWTAuthtoken(u)
 	if err != nil {
 		return err
 	}
@@ -52,26 +51,18 @@ func NewUserAuthTokenResponse(u *user.User, c echo.Context, long bool) error {
 }
 
 // NewUserJWTAuthtoken generates and signes a new jwt token for a user. This is a global function to be able to call it from integration tests.
-func NewUserJWTAuthtoken(u *user.User, long bool) (token string, err error) {
+func NewUserJWTAuthtoken(user *user.User) (token string, err error) {
 	t := jwt.New(jwt.SigningMethodHS256)
-
-	var ttl = time.Duration(config.ServiceJWTTTL.GetInt64())
-	if long {
-		ttl = time.Duration(config.ServiceJWTTTLLong.GetInt64())
-	}
-	var exp = time.Now().Add(time.Second * ttl).Unix()
 
 	// Set claims
 	claims := t.Claims.(jwt.MapClaims)
 	claims["type"] = AuthTypeUser
-	claims["id"] = u.ID
-	claims["username"] = u.Username
-	claims["email"] = u.Email
-	claims["exp"] = exp
-	claims["name"] = u.Name
-	claims["emailRemindersEnabled"] = u.EmailRemindersEnabled
-	claims["isLocalUser"] = u.Issuer == user.IssuerLocal
-	claims["long"] = long
+	claims["id"] = user.ID
+	claims["username"] = user.Username
+	claims["email"] = user.Email
+	claims["exp"] = time.Now().Add(time.Hour * 72).Unix()
+	claims["name"] = user.Name
+	claims["emailRemindersEnabled"] = user.EmailRemindersEnabled
 
 	// Generate encoded token and send it as response.
 	return t.SignedString([]byte(config.ServiceJWTSecret.GetString()))
@@ -81,9 +72,6 @@ func NewUserJWTAuthtoken(u *user.User, long bool) (token string, err error) {
 func NewLinkShareJWTAuthtoken(share *models.LinkSharing) (token string, err error) {
 	t := jwt.New(jwt.SigningMethodHS256)
 
-	var ttl = time.Duration(config.ServiceJWTTTL.GetInt64())
-	var exp = time.Now().Add(time.Second * ttl).Unix()
-
 	// Set claims
 	claims := t.Claims.(jwt.MapClaims)
 	claims["type"] = AuthTypeLinkShare
@@ -92,8 +80,7 @@ func NewLinkShareJWTAuthtoken(share *models.LinkSharing) (token string, err erro
 	claims["list_id"] = share.ListID
 	claims["right"] = share.Right
 	claims["sharedByID"] = share.SharedByID
-	claims["exp"] = exp
-	claims["isLocalUser"] = true // Link shares are always local
+	claims["exp"] = time.Now().Add(time.Hour * 72).Unix()
 
 	// Generate encoded token and send it as response.
 	return t.SignedString([]byte(config.ServiceJWTSecret.GetString()))

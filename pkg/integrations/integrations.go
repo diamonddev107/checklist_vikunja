@@ -17,7 +17,6 @@
 package integrations
 
 import (
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -25,18 +24,18 @@ import (
 	"strings"
 	"testing"
 
+	"code.vikunja.io/api/pkg/events"
+
 	"code.vikunja.io/api/pkg/config"
 	"code.vikunja.io/api/pkg/db"
-	"code.vikunja.io/api/pkg/events"
 	"code.vikunja.io/api/pkg/files"
 	"code.vikunja.io/api/pkg/models"
 	"code.vikunja.io/api/pkg/modules/auth"
-	"code.vikunja.io/api/pkg/modules/keyvalue"
 	"code.vikunja.io/api/pkg/routes"
 	"code.vikunja.io/api/pkg/user"
 	"code.vikunja.io/web"
 	"code.vikunja.io/web/handler"
-	"github.com/golang-jwt/jwt/v4"
+	"github.com/dgrijalva/jwt-go"
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 )
@@ -48,6 +47,7 @@ var (
 		Username: "user1",
 		Password: "$2a$14$dcadBoMBL9jQoOcZK8Fju.cy0Ptx2oZECkKLnaa8ekRoTFe1w7To.",
 		Email:    "user1@example.com",
+		IsActive: true,
 	}
 	testuser2 = user.User{
 		ID:       2,
@@ -56,23 +56,26 @@ var (
 		Email:    "user2@example.com",
 	}
 	testuser3 = user.User{
-		ID:       3,
-		Username: "user3",
-		Password: "$2a$14$dcadBoMBL9jQoOcZK8Fju.cy0Ptx2oZECkKLnaa8ekRoTFe1w7To.",
-		Email:    "user3@example.com",
+		ID:                 3,
+		Username:           "user3",
+		Password:           "$2a$14$dcadBoMBL9jQoOcZK8Fju.cy0Ptx2oZECkKLnaa8ekRoTFe1w7To.",
+		Email:              "user3@example.com",
+		PasswordResetToken: "passwordresettesttoken",
 	}
 	testuser4 = user.User{
-		ID:       4,
-		Username: "user4",
-		Password: "$2a$14$dcadBoMBL9jQoOcZK8Fju.cy0Ptx2oZECkKLnaa8ekRoTFe1w7To.",
-		Email:    "user4@example.com",
+		ID:                4,
+		Username:          "user4",
+		Password:          "$2a$14$dcadBoMBL9jQoOcZK8Fju.cy0Ptx2oZECkKLnaa8ekRoTFe1w7To.",
+		Email:             "user4@example.com",
+		EmailConfirmToken: "tiepiQueed8ahc7zeeFe1eveiy4Ein8osooxegiephauph2Ael",
 	}
 	testuser5 = user.User{
-		ID:       4,
-		Username: "user5",
-		Password: "$2a$14$dcadBoMBL9jQoOcZK8Fju.cy0Ptx2oZECkKLnaa8ekRoTFe1w7To.",
-		Email:    "user5@example.com",
-		Status:   user.StatusDisabled,
+		ID:                4,
+		Username:          "user5",
+		Password:          "$2a$14$dcadBoMBL9jQoOcZK8Fju.cy0Ptx2oZECkKLnaa8ekRoTFe1w7To.",
+		Email:             "user5@example.com",
+		EmailConfirmToken: "tiepiQueed8ahc7zeeFe1eveiy4Ein8osooxegiephauph2Ael",
+		IsActive:          false,
 	}
 )
 
@@ -85,7 +88,6 @@ func setupTestEnv() (e *echo.Echo, err error) {
 	user.InitTests()
 	models.SetupTests()
 	events.Fake()
-	keyvalue.InitStorage()
 
 	err = db.LoadFixtures()
 	if err != nil {
@@ -120,7 +122,7 @@ func newTestRequest(t *testing.T, method string, handler func(ctx echo.Context) 
 
 func addUserTokenToContext(t *testing.T, user *user.User, c echo.Context) {
 	// Get the token as a string
-	token, err := auth.NewUserJWTAuthtoken(user, false)
+	token, err := auth.NewUserJWTAuthtoken(user)
 	assert.NoError(t, err)
 	// We send the string token through the parsing function to get a valid jwt.Token
 	tken, err := jwt.Parse(token, func(t *jwt.Token) (interface{}, error) {
@@ -175,8 +177,8 @@ func assertHandlerErrorCode(t *testing.T, err error, expectedErrorCode int) {
 		t.Error("Error is nil")
 		t.FailNow()
 	}
-	var httperr *echo.HTTPError
-	if !errors.As(err, &httperr) {
+	httperr, ok := err.(*echo.HTTPError)
+	if !ok {
 		t.Error("Error is not *echo.HTTPError")
 		t.FailNow()
 	}

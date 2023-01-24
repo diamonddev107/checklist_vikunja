@@ -17,13 +17,13 @@
 package caldav
 
 import (
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
-	"code.vikunja.io/api/pkg/models"
-
+	"code.vikunja.io/api/pkg/config"
 	"code.vikunja.io/api/pkg/user"
 	"code.vikunja.io/api/pkg/utils"
 )
@@ -59,12 +59,10 @@ type Todo struct {
 	RelatedToUID string
 	Color        string
 
-	Start       time.Time
-	End         time.Time
-	DueDate     time.Time
-	Duration    time.Duration
-	RepeatAfter int64
-	RepeatMode  models.TaskRepeatMode
+	Start    time.Time
+	End      time.Time
+	DueDate  time.Time
+	Duration time.Duration
 
 	Created time.Time
 	Updated time.Time // last-mod
@@ -152,15 +150,6 @@ END:VCALENDAR` // Need a line break
 	return
 }
 
-func formatDuration(duration time.Duration) string {
-	seconds := duration.Seconds() - duration.Minutes()*60
-	minutes := duration.Minutes() - duration.Hours()*60
-
-	return strconv.FormatFloat(duration.Hours(), 'f', 0, 64) + `H` +
-		strconv.FormatFloat(minutes, 'f', 0, 64) + `M` +
-		strconv.FormatFloat(seconds, 'f', 0, 64) + `S`
-}
-
 // ParseTodos returns a caldav vcalendar string with todos
 func ParseTodos(config *Config, todos []*Todo) (caldavtodos string) {
 	caldavtodos = `BEGIN:VCALENDAR
@@ -183,15 +172,11 @@ SUMMARY:` + t.Summary + getCaldavColor(t.Color)
 
 		if t.Start.Unix() > 0 {
 			caldavtodos += `
-DTSTART:` + makeCalDavTimeFromTimeStamp(t.Start)
-			if t.Duration != 0 && t.DueDate.Unix() == 0 {
-				caldavtodos += `
-DURATION:PT` + formatDuration(t.Duration)
-			}
+DTSTART: ` + makeCalDavTimeFromTimeStamp(t.Start)
 		}
 		if t.End.Unix() > 0 {
 			caldavtodos += `
-DTEND:` + makeCalDavTimeFromTimeStamp(t.End)
+DTEND: ` + makeCalDavTimeFromTimeStamp(t.End)
 		}
 		if t.Description != "" {
 			re := regexp.MustCompile(`\r?\n`)
@@ -224,19 +209,14 @@ DUE:` + makeCalDavTimeFromTimeStamp(t.DueDate)
 CREATED:` + makeCalDavTimeFromTimeStamp(t.Created)
 		}
 
-		if t.Priority != 0 {
+		if t.Duration != 0 {
 			caldavtodos += `
-PRIORITY:` + strconv.Itoa(mapPriorityToCaldav(t.Priority))
+DURATION:PT` + fmt.Sprintf("%.6f", t.Duration.Hours()) + `H` + fmt.Sprintf("%.6f", t.Duration.Minutes()) + `M` + fmt.Sprintf("%.6f", t.Duration.Seconds()) + `S`
 		}
 
-		if t.RepeatAfter > 0 || t.RepeatMode == models.TaskRepeatModeMonth {
-			if t.RepeatMode == models.TaskRepeatModeMonth {
-				caldavtodos += `
-RRULE:FREQ=MONTHLY;BYMONTHDAY=` + t.DueDate.Format("02") // Day of the month
-			} else {
-				caldavtodos += `
-RRULE:FREQ=SECONDLY;INTERVAL=` + strconv.FormatInt(t.RepeatAfter, 10)
-			}
+		if t.Priority != 0 {
+			caldavtodos += `
+PRIORITY:` + strconv.Itoa(int(t.Priority))
 		}
 
 		caldavtodos += `
@@ -253,7 +233,7 @@ END:VCALENDAR` // Need a line break
 }
 
 func makeCalDavTimeFromTimeStamp(ts time.Time) (caldavtime string) {
-	return ts.In(time.UTC).Format(DateFormat) + "Z"
+	return ts.In(config.GetTimeZone()).Format(DateFormat)
 }
 
 func calcAlarmDateFromReminder(eventStart, reminder time.Time) (alarmTime string) {

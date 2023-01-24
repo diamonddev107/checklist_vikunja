@@ -21,12 +21,9 @@ import (
 	"strings"
 	"time"
 
-	"code.vikunja.io/api/pkg/db"
-
 	"code.vikunja.io/api/pkg/log"
 	"code.vikunja.io/api/pkg/user"
 	"code.vikunja.io/web"
-
 	"xorm.io/builder"
 	"xorm.io/xorm"
 )
@@ -78,7 +75,7 @@ func (lt *LabelTask) Delete(s *xorm.Session, a web.Auth) (err error) {
 // @Security JWTKeyAuth
 // @Param task path int true "Task ID"
 // @Param label body models.LabelTask true "The label object"
-// @Success 201 {object} models.LabelTask "The created label relation object."
+// @Success 200 {object} models.LabelTask "The created label relation object."
 // @Failure 400 {object} web.HTTPError "Invalid label object provided."
 // @Failure 403 {object} web.HTTPError "Not allowed to add the label."
 // @Failure 404 {object} web.HTTPError "The label does not exist."
@@ -203,7 +200,7 @@ func getLabelsByTaskIDs(s *xorm.Session, opts *LabelByTaskIDsOptions) (ls []*lab
 	if len(ids) > 0 {
 		cond = builder.And(cond, builder.In("labels.id", ids))
 	} else {
-		cond = builder.And(cond, db.ILIKE("labels.title", opts.Search))
+		cond = builder.And(cond, &builder.Like{"labels.title", "%" + opts.Search + "%"})
 	}
 
 	limit, start := getLimitFromPageIndex(opts.Page, opts.PerPage)
@@ -372,7 +369,7 @@ type LabelTaskBulk struct {
 // @Security JWTKeyAuth
 // @Param label body models.LabelTaskBulk true "The array of labels"
 // @Param taskID path int true "Task ID"
-// @Success 201 {object} models.LabelTaskBulk "The updated labels object."
+// @Success 200 {object} models.LabelTaskBulk "The updated labels object."
 // @Failure 400 {object} web.HTTPError "Invalid label object provided."
 // @Failure 500 {object} models.Message "Internal error"
 // @Router /tasks/{taskID}/labels/bulk [post]

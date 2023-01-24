@@ -17,13 +17,9 @@
 package metrics
 
 import (
-	"strconv"
-
 	"code.vikunja.io/api/pkg/log"
 	"code.vikunja.io/api/pkg/modules/keyvalue"
-
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
@@ -49,8 +45,8 @@ var registry *prometheus.Registry
 func GetRegistry() *prometheus.Registry {
 	if registry == nil {
 		registry = prometheus.NewRegistry()
-		registry.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
-		registry.MustRegister(collectors.NewGoCollector())
+		registry.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
+		registry.MustRegister(prometheus.NewGoCollector())
 	}
 
 	return registry
@@ -113,7 +109,7 @@ func InitMetrics() {
 		log.Criticalf("Could not register metrics for %s: %s", TaskCountKey, err)
 	}
 
-	// Register total teams count metric
+	// Register total user count metric
 	err = registry.Register(promauto.NewGaugeFunc(prometheus.GaugeOpts{
 		Name: "vikunja_team_count",
 		Help: "The total number of teams on this instance",
@@ -124,11 +120,9 @@ func InitMetrics() {
 	if err != nil {
 		log.Criticalf("Could not register metrics for %s: %s", TeamCountKey, err)
 	}
-
-	setupActiveUsersMetric()
 }
 
-// GetCount returns the current count from keyvalue
+// GetCount returns the current count from redis
 func GetCount(key string) (count int64, err error) {
 	cnt, exists, err := keyvalue.Get(key)
 	if err != nil {
@@ -138,11 +132,7 @@ func GetCount(key string) (count int64, err error) {
 		return 0, nil
 	}
 
-	if s, is := cnt.(string); is {
-		count, err = strconv.ParseInt(s, 10, 64)
-	} else {
-		count = cnt.(int64)
-	}
+	count = cnt.(int64)
 
 	return
 }

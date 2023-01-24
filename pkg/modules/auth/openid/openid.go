@@ -19,12 +19,9 @@ package openid
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"math/rand"
 	"net/http"
 	"time"
-
-	"code.vikunja.io/web/handler"
 
 	"code.vikunja.io/api/pkg/db"
 	"xorm.io/xorm"
@@ -33,7 +30,7 @@ import (
 	"code.vikunja.io/api/pkg/models"
 	"code.vikunja.io/api/pkg/modules/auth"
 	"code.vikunja.io/api/pkg/user"
-	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/coreos/go-oidc"
 	petname "github.com/dustinkirkland/golang-petname"
 	"github.com/labstack/echo/v4"
 	"golang.org/x/oauth2"
@@ -47,31 +44,23 @@ type Callback struct {
 
 // Provider is the structure of an OpenID Connect provider
 type Provider struct {
-	Name            string `json:"name"`
-	Key             string `json:"key"`
-	OriginalAuthURL string `json:"-"`
-	AuthURL         string `json:"auth_url"`
-	LogoutURL       string `json:"logout_url"`
-	ClientID        string `json:"client_id"`
-	ClientSecret    string `json:"-"`
-	openIDProvider  *oidc.Provider
-	Oauth2Config    *oauth2.Config `json:"-"`
+	Name           string         `json:"name"`
+	Key            string         `json:"key"`
+	AuthURL        string         `json:"auth_url"`
+	ClientID       string         `json:"client_id"`
+	ClientSecret   string         `json:"-"`
+	OpenIDProvider *oidc.Provider `json:"-"`
+	Oauth2Config   *oauth2.Config `json:"-"`
 }
 
 type claims struct {
 	Email             string `json:"email"`
 	Name              string `json:"name"`
 	PreferredUsername string `json:"preferred_username"`
-	Nickname          string `json:"nickname"`
 }
 
 func init() {
 	rand.Seed(time.Now().UTC().UnixNano())
-}
-
-func (p *Provider) setOicdProvider() (err error) {
-	p.openIDProvider, err = oidc.NewProvider(context.Background(), p.OriginalAuthURL)
-	return err
 }
 
 // HandleCallback handles the auth request callback after redirecting from the provider with an auth code
@@ -97,7 +86,7 @@ func HandleCallback(c echo.Context) error {
 	provider, err := GetProvider(providerKey)
 	if err != nil {
 		log.Error(err)
-		return handler.HandleHTTPError(err, c)
+		return err
 	}
 	if provider == nil {
 		return c.JSON(http.StatusBadRequest, models.Message{Message: "Provider does not exist"})
@@ -106,14 +95,12 @@ func HandleCallback(c echo.Context) error {
 	// Parse the access & ID token
 	oauth2Token, err := provider.Oauth2Config.Exchange(context.Background(), cb.Code)
 	if err != nil {
-		var rerr *oauth2.RetrieveError
-		if errors.As(err, &rerr) {
+		if rerr, is := err.(*oauth2.RetrieveError); is {
 			log.Error(err)
 
 			details := make(map[string]interface{})
 			if err := json.Unmarshal(rerr.Body, &details); err != nil {
-				log.Errorf("Error unmarshalling token for provider %s: %v", provider.Name, err)
-				return handler.HandleHTTPError(err, c)
+				return err
 			}
 
 			return c.JSON(http.StatusBadRequest, map[string]interface{}{
@@ -122,7 +109,7 @@ func HandleCallback(c echo.Context) error {
 			})
 		}
 
-		return handler.HandleHTTPError(err, c)
+		return err
 	}
 
 	// Extract the ID Token from OAuth2 token.
@@ -131,57 +118,19 @@ func HandleCallback(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, models.Message{Message: "Missing token"})
 	}
 
-	verifier := provider.openIDProvider.Verifier(&oidc.Config{ClientID: provider.ClientID})
+	verifier := provider.OpenIDProvider.Verifier(&oidc.Config{ClientID: provider.ClientID})
 
 	// Parse and verify ID Token payload.
 	idToken, err := verifier.Verify(context.Background(), rawIDToken)
 	if err != nil {
-		log.Errorf("Error verifying token for provider %s: %v", provider.Name, err)
-		return handler.HandleHTTPError(err, c)
+		return err
 	}
 
 	// Extract custom claims
 	cl := &claims{}
 	err = idToken.Claims(cl)
 	if err != nil {
-		log.Errorf("Error getting token claims for provider %s: %v", provider.Name, err)
-		return handler.HandleHTTPError(err, c)
-	}
-
-	if cl.Email == "" || cl.Name == "" || cl.PreferredUsername == "" {
-		info, err := provider.openIDProvider.UserInfo(context.Background(), provider.Oauth2Config.TokenSource(context.Background(), oauth2Token))
-		if err != nil {
-			log.Errorf("Error getting userinfo for provider %s: %v", provider.Name, err)
-			return handler.HandleHTTPError(err, c)
-		}
-
-		cl2 := &claims{}
-		err = info.Claims(cl2)
-		if err != nil {
-			log.Errorf("Error parsing userinfo claims for provider %s: %v", provider.Name, err)
-			return handler.HandleHTTPError(err, c)
-		}
-
-		if cl.Email == "" {
-			cl.Email = cl2.Email
-		}
-
-		if cl.Name == "" {
-			cl.Name = cl2.Name
-		}
-
-		if cl.PreferredUsername == "" {
-			cl.PreferredUsername = cl2.PreferredUsername
-		}
-
-		if cl.PreferredUsername == "" && cl2.Nickname != "" {
-			cl.PreferredUsername = cl2.Nickname
-		}
-
-		if cl.Email == "" {
-			log.Errorf("Claim does not contain an email address for provider %s", provider.Name)
-			return handler.HandleHTTPError(&user.ErrNoOpenIDEmailProvided{}, c)
-		}
+		return err
 	}
 
 	s := db.NewSession()
@@ -191,17 +140,16 @@ func HandleCallback(c echo.Context) error {
 	u, err := getOrCreateUser(s, cl, idToken.Issuer, idToken.Subject)
 	if err != nil {
 		_ = s.Rollback()
-		log.Errorf("Error creating new user for provider %s: %v", provider.Name, err)
-		return handler.HandleHTTPError(err, c)
+		return err
 	}
 
 	err = s.Commit()
 	if err != nil {
-		return handler.HandleHTTPError(err, c)
+		return err
 	}
 
 	// Create token
-	return auth.NewUserAuthTokenResponse(u, c, false)
+	return auth.NewUserAuthTokenResponse(u, c)
 }
 
 func getOrCreateUser(s *xorm.Session, cl *claims, issuer, subject string) (u *user.User, err error) {
@@ -219,8 +167,7 @@ func getOrCreateUser(s *xorm.Session, cl *claims, issuer, subject string) (u *us
 		uu := &user.User{
 			Username: cl.PreferredUsername,
 			Email:    cl.Email,
-			Name:     cl.Name,
-			Status:   user.StatusActive,
+			IsActive: true,
 			Issuer:   issuer,
 			Subject:  subject,
 		}

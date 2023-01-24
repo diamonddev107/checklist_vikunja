@@ -21,8 +21,6 @@ import (
 	"strings"
 	"time"
 
-	"code.vikunja.io/api/pkg/db"
-
 	"code.vikunja.io/api/pkg/config"
 	"code.vikunja.io/api/pkg/events"
 	"code.vikunja.io/api/pkg/files"
@@ -51,6 +49,12 @@ type List struct {
 
 	// The user who created this list.
 	Owner *user.User `xorm:"-" json:"owner" valid:"-"`
+	// An array of tasks which belong to the list.
+	// Deprecated: you should use the dedicated task list endpoint because it has support for pagination and filtering
+	Tasks []*Task `xorm:"-" json:"-"`
+
+	// Only used for migration.
+	Buckets []*Bucket `xorm:"-" json:"-"`
 
 	// Whether or not a list is archived.
 	IsArchived bool `xorm:"not null default false" json:"is_archived" query:"is_archived"`
@@ -59,18 +63,13 @@ type List struct {
 	BackgroundFileID int64 `xorm:"null" json:"-"`
 	// Holds extra information about the background set since some background providers require attribution or similar. If not null, the background can be accessed at /lists/{listID}/background
 	BackgroundInformation interface{} `xorm:"-" json:"background_information"`
-	// Contains a very small version of the list background to use as a blurry preview until the actual background is loaded. Check out https://blurha.sh/ to learn how it works.
-	BackgroundBlurHash string `xorm:"varchar(50) null" json:"background_blur_hash"`
 
-	// True if a list is a favorite. Favorite lists show up in a separate namespace. This value depends on the user making the call to the api.
-	IsFavorite bool `xorm:"-" json:"is_favorite"`
+	// True if a list is a favorite. Favorite lists show up in a separate namespace.
+	IsFavorite bool `xorm:"default false" json:"is_favorite"`
 
 	// The subscription status for the user reading this list. You can only read this property, use the subscription endpoints to modify it.
 	// Will only returned when retreiving one list.
 	Subscription *Subscription `xorm:"-" json:"subscription,omitempty"`
-
-	// The position this list has when querying all lists. See the tasks.position property on how to use this.
-	Position float64 `xorm:"double null" json:"position"`
 
 	// A timestamp when this list was created. You cannot change this value.
 	Created time.Time `xorm:"created not null" json:"created"`
@@ -79,15 +78,6 @@ type List struct {
 
 	web.CRUDable `xorm:"-" json:"-"`
 	web.Rights   `xorm:"-" json:"-"`
-}
-
-type ListWithTasksAndBuckets struct {
-	List
-	// An array of tasks which belong to the list.
-	Tasks []*TaskWithComments `xorm:"-" json:"tasks"`
-	// Only used for migration.
-	Buckets          []*Bucket `xorm:"-" json:"buckets"`
-	BackgroundFileID int64     `xorm:"null" json:"background_file_id"`
 }
 
 // TableName returns a better name for the lists table
@@ -156,7 +146,7 @@ func GetListsByNamespaceID(s *xorm.Session, nID int64, doer *user.User) (lists [
 			Alias("l").
 			Join("LEFT", []string{"namespaces", "n"}, "l.namespace_id = n.id").
 			Where("l.is_archived = false").
-			Where("n.is_archived = false OR n.is_archived IS NULL").
+			Where("n.is_archived = false").
 			Where("namespace_id = ?", nID).
 			Find(&lists)
 	}
@@ -165,7 +155,7 @@ func GetListsByNamespaceID(s *xorm.Session, nID int64, doer *user.User) (lists [
 	}
 
 	// get more list details
-	err = addListDetails(s, lists, doer)
+	err = addListDetails(s, lists)
 	return lists, err
 }
 
@@ -193,7 +183,7 @@ func (l *List) ReadAll(s *xorm.Session, a web.Auth, search string, page int, per
 			return nil, 0, 0, err
 		}
 		lists := []*List{list}
-		err = addListDetails(s, lists, a)
+		err = addListDetails(s, lists)
 		return lists, 0, 0, err
 	}
 
@@ -211,7 +201,7 @@ func (l *List) ReadAll(s *xorm.Session, a web.Auth, search string, page int, per
 	}
 
 	// Add more list details
-	err = addListDetails(s, lists, a)
+	err = addListDetails(s, lists)
 	return lists, resultCount, totalItems, err
 }
 
@@ -276,11 +266,6 @@ func (l *List) ReadOne(s *xorm.Session, a web.Auth) (err error) {
 		}
 	}
 
-	l.IsFavorite, err = isFavorite(s, l.ID, a, FavoriteKindList)
-	if err != nil {
-		return
-	}
-
 	l.Subscription, err = GetSubscription(s, SubscriptionEntityList, l.ID, a)
 	return
 }
@@ -294,10 +279,7 @@ func GetListSimpleByID(s *xorm.Session, listID int64) (list *List, err error) {
 		return nil, ErrListDoesNotExist{ID: listID}
 	}
 
-	exists, err := s.
-		Where("id = ?", listID).
-		OrderBy("position").
-		Get(list)
+	exists, err := s.Where("id = ?", listID).Get(list)
 	if err != nil {
 		return
 	}
@@ -374,7 +356,6 @@ func getUserListsStatement(userID int64) *builder.Builder {
 			builder.Eq{"un.user_id": userID},
 			builder.Eq{"l.owner_id": userID},
 		)).
-		OrderBy("position").
 		GroupBy("l.id")
 }
 
@@ -410,9 +391,10 @@ func getRawListsForUser(s *xorm.Session, opts *listOptions) (lists []*List, resu
 		}
 	}
 
-	filterCond = db.ILIKE("l.title", opts.search)
 	if len(ids) > 0 {
 		filterCond = builder.In("l.id", ids)
+	} else {
+		filterCond = &builder.Like{"l.title", "%" + opts.search + "%"}
 	}
 
 	// Gets all Lists where the user is either owner or in a team which has access to the list
@@ -439,7 +421,7 @@ func getRawListsForUser(s *xorm.Session, opts *listOptions) (lists []*List, resu
 }
 
 // addListDetails adds owner user objects and list tasks to all lists in the slice
-func addListDetails(s *xorm.Session, lists []*List, a web.Auth) (err error) {
+func addListDetails(s *xorm.Session, lists []*List) (err error) {
 	if len(lists) == 0 {
 		return
 	}
@@ -459,9 +441,7 @@ func addListDetails(s *xorm.Session, lists []*List, a web.Auth) (err error) {
 	}
 
 	var fileIDs []int64
-	var listIDs []int64
 	for _, l := range lists {
-		listIDs = append(listIDs, l.ID)
 		if o, exists := owners[l.OwnerID]; exists {
 			l.Owner = o
 		}
@@ -469,29 +449,6 @@ func addListDetails(s *xorm.Session, lists []*List, a web.Auth) (err error) {
 			l.BackgroundInformation = &ListBackgroundType{Type: ListBackgroundUpload}
 		}
 		fileIDs = append(fileIDs, l.BackgroundFileID)
-	}
-
-	favs, err := getFavorites(s, listIDs, a, FavoriteKindList)
-	if err != nil {
-		return err
-	}
-
-	subscriptions, err := GetSubscriptions(s, SubscriptionEntityList, listIDs, a)
-	if err != nil {
-		log.Errorf("An error occurred while getting list subscriptions for a namespace item: %s", err.Error())
-		subscriptions = make(map[int64]*Subscription)
-	}
-
-	for _, list := range lists {
-		// Don't override the favorite state if it was already set from before (favorite saved filters do this)
-		if list.IsFavorite {
-			continue
-		}
-		list.IsFavorite = favs[list.ID]
-
-		if subscription, exists := subscriptions[list.ID]; exists {
-			list.Subscription = subscription
-		}
 	}
 
 	if len(fileIDs) == 0 {
@@ -552,14 +509,12 @@ func (l *List) CheckIsArchived(s *xorm.Session) (err error) {
 	return nil
 }
 
-func checkListBeforeUpdateOrDelete(s *xorm.Session, list *List) error {
-	if list.NamespaceID < 0 {
-		return &ErrListCannotBelongToAPseudoNamespace{ListID: list.ID, NamespaceID: list.NamespaceID}
-	}
+// CreateOrUpdateList updates a list or creates it if it doesn't exist
+func CreateOrUpdateList(s *xorm.Session, list *List, auth web.Auth) (err error) {
 
 	// Check if the namespace exists
-	if list.NamespaceID > 0 {
-		_, err := GetNamespaceByID(s, list.NamespaceID)
+	if list.NamespaceID != 0 && list.NamespaceID != FavoritesPseudoNamespace.ID {
+		_, err = GetNamespaceByID(s, list.NamespaceID)
 		if err != nil {
 			return err
 		}
@@ -579,121 +534,30 @@ func checkListBeforeUpdateOrDelete(s *xorm.Session, list *List) error {
 		}
 	}
 
-	return nil
-}
-
-func CreateList(s *xorm.Session, list *List, auth web.Auth) (err error) {
-	err = list.CheckIsArchived(s)
-	if err != nil {
-		return err
-	}
-
-	doer, err := user.GetFromAuth(auth)
-	if err != nil {
-		return err
-	}
-
-	list.OwnerID = doer.ID
-	list.Owner = doer
-	list.ID = 0 // Otherwise only the first time a new list would be created
-
-	err = checkListBeforeUpdateOrDelete(s, list)
-	if err != nil {
-		return
-	}
-
-	_, err = s.Insert(list)
-	if err != nil {
-		return
-	}
-
-	list.Position = calculateDefaultPosition(list.ID, list.Position)
-	_, err = s.Where("id = ?", list.ID).Update(list)
-	if err != nil {
-		return
-	}
-	if list.IsFavorite {
-		if err := addToFavorites(s, list.ID, auth, FavoriteKindList); err != nil {
-			return err
+	if list.ID == 0 {
+		_, err = s.Insert(list)
+	} else {
+		// We need to specify the cols we want to update here to be able to un-archive lists
+		colsToUpdate := []string{
+			"title",
+			"is_archived",
+			"identifier",
+			"hex_color",
+			"is_favorite",
+			"background_file_id",
 		}
+		if list.Description != "" {
+			colsToUpdate = append(colsToUpdate, "description")
+		}
+
+		_, err = s.
+			ID(list.ID).
+			Cols(colsToUpdate...).
+			Update(list)
 	}
 
-	// Create a new first bucket for this list
-	b := &Bucket{
-		ListID: list.ID,
-		Title:  "Backlog",
-	}
-	err = b.Create(s, auth)
 	if err != nil {
 		return
-	}
-
-	return events.Dispatch(&ListCreatedEvent{
-		List: list,
-		Doer: doer,
-	})
-}
-
-func UpdateList(s *xorm.Session, list *List, auth web.Auth, updateListBackground bool) (err error) {
-	err = checkListBeforeUpdateOrDelete(s, list)
-	if err != nil {
-		return
-	}
-
-	if list.NamespaceID == 0 {
-		return &ErrListMustBelongToANamespace{
-			ListID:      list.ID,
-			NamespaceID: list.NamespaceID,
-		}
-	}
-
-	// We need to specify the cols we want to update here to be able to un-archive lists
-	colsToUpdate := []string{
-		"title",
-		"is_archived",
-		"identifier",
-		"hex_color",
-		"namespace_id",
-		"position",
-	}
-	if list.Description != "" {
-		colsToUpdate = append(colsToUpdate, "description")
-	}
-
-	if updateListBackground {
-		colsToUpdate = append(colsToUpdate, "background_file_id", "background_blur_hash")
-	}
-
-	wasFavorite, err := isFavorite(s, list.ID, auth, FavoriteKindList)
-	if err != nil {
-		return err
-	}
-	if list.IsFavorite && !wasFavorite {
-		if err := addToFavorites(s, list.ID, auth, FavoriteKindList); err != nil {
-			return err
-		}
-	}
-
-	if !list.IsFavorite && wasFavorite {
-		if err := removeFromFavorite(s, list.ID, auth, FavoriteKindList); err != nil {
-			return err
-		}
-	}
-
-	_, err = s.
-		ID(list.ID).
-		Cols(colsToUpdate...).
-		Update(list)
-	if err != nil {
-		return err
-	}
-
-	err = events.Dispatch(&ListUpdatedEvent{
-		List: list,
-		Doer: auth,
-	})
-	if err != nil {
-		return err
 	}
 
 	l, err := GetListSimpleByID(s, list.ID)
@@ -704,6 +568,7 @@ func UpdateList(s *xorm.Session, list *List, auth web.Auth, updateListBackground
 	*list = *l
 	err = list.ReadOne(s, auth)
 	return
+
 }
 
 // Update implements the update method of CRUDable
@@ -728,9 +593,9 @@ func (l *List) Update(s *xorm.Session, a web.Auth) (err error) {
 			return err
 		}
 
+		f.IsFavorite = l.IsFavorite
 		f.Title = l.Title
 		f.Description = l.Description
-		f.IsFavorite = l.IsFavorite
 		err = f.Update(s, a)
 		if err != nil {
 			return err
@@ -740,7 +605,15 @@ func (l *List) Update(s *xorm.Session, a web.Auth) (err error) {
 		return nil
 	}
 
-	return UpdateList(s, l, a, false)
+	err = CreateOrUpdateList(s, l, a)
+	if err != nil {
+		return err
+	}
+
+	return events.Dispatch(&ListUpdatedEvent{
+		List: l,
+		Doer: a,
+	})
 }
 
 func updateListLastUpdated(s *xorm.Session, list *List) error {
@@ -767,18 +640,45 @@ func updateListByTaskID(s *xorm.Session, taskID int64) (err error) {
 // @Security JWTKeyAuth
 // @Param namespaceID path int true "Namespace ID"
 // @Param list body models.List true "The list you want to create."
-// @Success 201 {object} models.List "The created list."
+// @Success 200 {object} models.List "The created list."
 // @Failure 400 {object} web.HTTPError "Invalid list object provided."
 // @Failure 403 {object} web.HTTPError "The user does not have access to the list"
 // @Failure 500 {object} models.Message "Internal error"
 // @Router /namespaces/{namespaceID}/lists [put]
 func (l *List) Create(s *xorm.Session, a web.Auth) (err error) {
-	err = CreateList(s, l, a)
+	err = l.CheckIsArchived(s)
+	if err != nil {
+		return err
+	}
+
+	doer, err := user.GetFromAuth(a)
+	if err != nil {
+		return err
+	}
+
+	l.OwnerID = doer.ID
+	l.Owner = doer
+	l.ID = 0 // Otherwise only the first time a new list would be created
+
+	err = CreateOrUpdateList(s, l, a)
 	if err != nil {
 		return
 	}
 
-	return l.ReadOne(s, a)
+	// Create a new first bucket for this list
+	b := &Bucket{
+		ListID: l.ID,
+		Title:  "Backlog",
+	}
+	err = b.Create(s, a)
+	if err != nil {
+		return
+	}
+
+	return events.Dispatch(&ListCreatedEvent{
+		List: l,
+		Doer: doer,
+	})
 }
 
 // Delete implements the delete method of CRUDable
@@ -802,17 +702,9 @@ func (l *List) Delete(s *xorm.Session, a web.Auth) (err error) {
 	}
 
 	// Delete all tasks on that list
-	// Using the loop to make sure all related entities to all tasks are properly deleted as well.
-	tasks, _, _, err := getRawTasksForLists(s, []*List{l}, a, &taskOptions{})
+	_, err = s.Where("list_id = ?", l.ID).Delete(&Task{})
 	if err != nil {
 		return
-	}
-
-	for _, task := range tasks {
-		err = task.Delete(s, a)
-		if err != nil {
-			return err
-		}
 	}
 
 	return events.Dispatch(&ListDeletedEvent{
@@ -822,15 +714,14 @@ func (l *List) Delete(s *xorm.Session, a web.Auth) (err error) {
 }
 
 // SetListBackground sets a background file as list background in the db
-func SetListBackground(s *xorm.Session, listID int64, background *files.File, blurHash string) (err error) {
+func SetListBackground(s *xorm.Session, listID int64, background *files.File) (err error) {
 	l := &List{
-		ID:                 listID,
-		BackgroundFileID:   background.ID,
-		BackgroundBlurHash: blurHash,
+		ID:               listID,
+		BackgroundFileID: background.ID,
 	}
 	_, err = s.
 		Where("id = ?", l.ID).
-		Cols("background_file_id", "background_blur_hash").
+		Cols("background_file_id").
 		Update(l)
 	return
 }

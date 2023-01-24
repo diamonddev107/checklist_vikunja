@@ -91,20 +91,33 @@ func ListUsersFromList(s *xorm.Session, l *List, search string) (users []*user.U
 		uidmap[u.TeamNamespaceUserID] = true
 	}
 
-	uids := make([]int64, 0, len(uidmap))
+	uids := make([]int64, len(uidmap))
 	for id := range uidmap {
 		uids = append(uids, id)
 	}
 
-	var cond builder.Cond
+	var cond builder.Cond = builder.Like{"username", "%" + search + "%"}
 
 	if len(uids) > 0 {
-		cond = builder.In("id", uids)
+		cond = builder.And(
+			builder.In("id", uids),
+			cond,
+		)
 	}
 
-	users, err = user.ListUsers(s, search, &user.ListUserOpts{
-		AdditionalCond:              cond,
-		ReturnAllIfNoSearchProvided: true,
-	})
+	// Get all users
+	err = s.
+		Table("users").
+		Select("*").
+		Where(cond).
+		GroupBy("id").
+		OrderBy("id").
+		Find(&users)
+
+	// Obfuscate all user emails
+	for _, u := range users {
+		u.Email = ""
+	}
+
 	return
 }

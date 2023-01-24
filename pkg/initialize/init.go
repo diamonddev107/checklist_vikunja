@@ -78,14 +78,14 @@ func FullInit() {
 
 	LightInit()
 
-	// Initialize the files handler
-	files.InitFileHandler()
-
 	// Run the migrations
 	migration.Migrate(nil)
 
 	// Set Engine
 	InitEngines()
+
+	// Initialize the files handler
+	files.InitFileHandler()
 
 	// Start the mail daemon
 	mail.StartMailDaemon()
@@ -94,10 +94,6 @@ func FullInit() {
 	cron.Init()
 	models.RegisterReminderCron()
 	models.RegisterOverdueReminderCron()
-	user.RegisterTokenCleanupCron()
-	user.RegisterDeletionNotificationCron()
-	models.RegisterUserDeletionCron()
-	models.RegisterOldExportCleanupCron()
 
 	// Start processing events
 	go func() {
