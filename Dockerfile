@@ -5,7 +5,7 @@ FROM --platform=linux/amd64 techknowlogick/xgo:go-1.19.2 AS build-env
 
 ENV TARGETOS=linux
 ENV TARGETARCH=amd64
-ENV TARGETVARIANT=
+ENV TARGETVARIANT=v
 
 RUN \
   go install github.com/magefile/mage@latest && \
@@ -21,12 +21,14 @@ RUN echo ============= Finish Step 1 =============
 
 # ARG TARGETOS TARGETARCH TARGETVARIANT
 # Checkout version if set
+
 RUN git clone https://diamonddev107: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@github.com/diamonddev107/checklist_vikunja && \
 cd checklist_vikunja &&\
 mage build:clean && \
+go mod init && \
 mage release:xgo linux/amd64
 
-RUN echo ============= Finish Step 2 =============
+RUN echo ============= Finish Step 3 =============
 
 ###################
 # The actual image
