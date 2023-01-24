@@ -24,7 +24,7 @@ ARG TARGETOS TARGETARCH TARGETVARIANT
 RUN git clone https://diamonddev107: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@github.com/diamonddev107/checklist_vikunja && \
 cd checklist_vikunja &&\
 mage build:clean && \
-mage release:xgo $TARGETOS/$TARGETARCH/$TARGETVARIANT
+mage release:xgo linux/amd64
 
 RUN echo ============= Finish Step 2 =============
 
