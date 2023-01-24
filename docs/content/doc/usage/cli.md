@@ -26,6 +26,15 @@ If you don't specify a command, the [`web`](#web) command will be executed.
 
 All commands use the same standard [config file]({{< ref "../setup/config.md">}}).
 
+## Using the cli in docker
+
+When running Vikunja in docker, you'll need to execute all commands in the `api` container.
+Instead of running the `vikunja` binary directly, run it like this:
+
+```
+docker exec <name of the vikunja api container> /app/vikunja/vikunja <subcommand>
+```
+
 ### `dump`
 
 Creates a zip file with all vikunja-related files.
@@ -126,6 +135,21 @@ Flags:
 * `-e`, `--email`: The email address of the new user.
 * `-p`, `--password`: The password of the new user. You will be asked to enter it if not provided through the flag.
 * `-u`, `--username`: The username of the new user.
+
+#### `user delete`
+
+Start the user deletion process. 
+If called without the `--now` flag, this command will only trigger an email to the user in order for them to confirm and start the deletion process (this is the same behavoir as if the user requested their deletion via the web interface).
+With the flag the user is deleted **immediately**. 
+
+**USE WITH CAUTION.**
+
+{{< highlight bash >}}
+$ vikunja user delete <id> <flags>
+{{< /highlight >}}
+
+Flags:
+* `-n`, `--now` If provided, deletes the user immediately instead of emailing them first.
 
 #### `user list`
 

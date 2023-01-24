@@ -840,7 +840,7 @@ Environment path: `VIKUNJA_LOG_HTTP`
 
 ### echo
 
-Echo has its own logging which usually is unnessecary, which is why it is disabled by default. Possible values are stdout, stderr, file or off to disable standard logging.
+Echo has its own logging which usually is unnecessary, which is why it is disabled by default. Possible values are stdout, stderr, file or off to disable standard logging.
 
 Default: `off`
 
@@ -967,17 +967,6 @@ Environment path: `VIKUNJA_FILES_MAXSIZE`
 
 ## migration
 
-
-
-### wunderlist
-
-These are the settings for the wunderlist migrator
-
-Default: `<empty>`
-
-Full path: `migration.wunderlist`
-
-Environment path: `VIKUNJA_MIGRATION_WUNDERLIST`
 
 
 ### todoist

@@ -48,7 +48,6 @@ package routes
 
 import (
 	"errors"
-	"fmt"
 	"net/url"
 	"strings"
 	"time"
@@ -70,7 +69,6 @@ import (
 	"code.vikunja.io/api/pkg/modules/migration/todoist"
 	"code.vikunja.io/api/pkg/modules/migration/trello"
 	vikunja_file "code.vikunja.io/api/pkg/modules/migration/vikunja-file"
-	"code.vikunja.io/api/pkg/modules/migration/wunderlist"
 	apiv1 "code.vikunja.io/api/pkg/routes/api/v1"
 	"code.vikunja.io/api/pkg/routes/caldav"
 	_ "code.vikunja.io/api/pkg/swagger" // To generate swagger docs
@@ -80,7 +78,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	sentryecho "github.com/getsentry/sentry-go/echo"
-	"github.com/golang-jwt/jwt/v4"
+	echojwt "github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	elog "github.com/labstack/gommon/log"
@@ -273,29 +271,8 @@ func registerAPIRoutes(a *echo.Group) {
 		ur.POST("/shares/:share/auth", apiv1.AuthenticateLinkShare)
 	}
 
-	// ===== Routes with Authetication =====
-	// Authetification
-	a.Use(middleware.JWTWithConfig(middleware.JWTConfig{
-		// Custom parse function to make the middleware work with the github.com/golang-jwt/jwt/v4 package.
-		// See https://github.com/labstack/echo/pull/1916#issuecomment-878046299
-		ParseTokenFunc: func(auth string, c echo.Context) (interface{}, error) {
-			keyFunc := func(t *jwt.Token) (interface{}, error) {
-				if t.Method.Alg() != "HS256" {
-					return nil, fmt.Errorf("unexpected jwt signing method=%v", t.Header["alg"])
-				}
-				return []byte(config.ServiceJWTSecret.GetString()), nil
-			}
-
-			token, err := jwt.Parse(auth, keyFunc)
-			if err != nil {
-				return nil, err
-			}
-			if !token.Valid {
-				return nil, errors.New("invalid token")
-			}
-			return token, nil
-		},
-	}))
+	// ===== Routes with Authentication =====
+	a.Use(echojwt.JWT([]byte(config.ServiceJWTSecret.GetString())))
 
 	// Rate limit
 	setupRateLimit(a, config.RateLimitKind.GetString())
@@ -612,16 +589,6 @@ func registerAPIRoutes(a *echo.Group) {
 }
 
 func registerMigrations(m *echo.Group) {
-	// Wunderlist
-	if config.MigrationWunderlistEnable.GetBool() {
-		wunderlistMigrationHandler := &migrationHandler.MigrationWeb{
-			MigrationStruct: func() migration.Migrator {
-				return &wunderlist.Migration{}
-			},
-		}
-		wunderlistMigrationHandler.RegisterRoutes(m)
-	}
-
 	// Todoist
 	if config.MigrationTodoistEnable.GetBool() {
 		todoistMigrationHandler := &migrationHandler.MigrationWeb{

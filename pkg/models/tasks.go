@@ -227,6 +227,9 @@ func getFilterCond(f *taskFilter, includeNulls bool) (cond builder.Cond, err err
 
 	if includeNulls {
 		cond = builder.Or(cond, &builder.IsNull{field})
+		if f.isNumeric {
+			cond = builder.Or(cond, &builder.IsNull{field}, &builder.Eq{field: 0})
+		}
 	}
 
 	return
@@ -306,10 +309,10 @@ func getRawTasksForLists(s *xorm.Session, lists []*List, a web.Auth, opts *taskO
 		// Because it does not have support for NULLS FIRST or NULLS LAST we work around this by
 		// first sorting for null (or not null) values and then the order we actually want to.
 		if db.Type() == schemas.MYSQL {
-			orderby += param.sortBy + " IS NULL, "
+			orderby += "`" + param.sortBy + "` IS NULL, "
 		}
 
-		orderby += param.sortBy + " " + param.orderBy.String()
+		orderby += "`" + param.sortBy + "` " + param.orderBy.String()
 
 		// Postgres and sqlite allow us to control how columns with null values are sorted.
 		// To make that consistent with the sort order we have and other dbms, we're adding a separate clause here.
@@ -580,7 +583,9 @@ func GetTasksByUIDs(s *xorm.Session, uids []string, a web.Auth) (tasks []*Task, 
 
 func getRemindersForTasks(s *xorm.Session, taskIDs []int64) (reminders []*TaskReminder, err error) {
 	reminders = []*TaskReminder{}
-	err = s.In("task_id", taskIDs).Find(&reminders)
+	err = s.In("task_id", taskIDs).
+		OrderBy("reminder asc").
+		Find(&reminders)
 	return
 }
 
@@ -812,23 +817,28 @@ func checkBucketLimit(s *xorm.Session, t *Task, bucket *Bucket) (err error) {
 }
 
 // Contains all the task logic to figure out what bucket to use for this task.
-func setTaskBucket(s *xorm.Session, task *Task, originalTask *Task, doCheckBucketLimit bool) (err error) {
+func setTaskBucket(s *xorm.Session, task *Task, originalTask *Task, doCheckBucketLimit bool) (targetBucket *Bucket, err error) {
 	// Make sure we have a bucket
 	var bucket *Bucket
 	if task.Done && originalTask != nil && !originalTask.Done {
 		bucket, err := getDoneBucketForList(s, task.ListID)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if bucket != nil {
 			task.BucketID = bucket.ID
 		}
 	}
 
+	if task.BucketID == 0 && originalTask != nil && originalTask.BucketID != 0 {
+		task.BucketID = originalTask.BucketID
+	}
+
+	// Either no bucket was provided or the task was moved between lists
 	if task.BucketID == 0 || (originalTask != nil && task.ListID != 0 && originalTask.ListID != task.ListID) {
 		bucket, err = getDefaultBucket(s, task.ListID)
 		if err != nil {
-			return err
+			return
 		}
 		task.BucketID = bucket.ID
 	}
@@ -836,7 +846,7 @@ func setTaskBucket(s *xorm.Session, task *Task, originalTask *Task, doCheckBucke
 	if bucket == nil {
 		bucket, err = getBucketByID(s, task.BucketID)
 		if err != nil {
-			return err
+			return
 		}
 	}
 
@@ -850,7 +860,7 @@ func setTaskBucket(s *xorm.Session, task *Task, originalTask *Task, doCheckBucke
 	// Only check the bucket limit if the task is being moved between buckets, allow reordering the task within a bucket
 	if doCheckBucketLimit {
 		if err := checkBucketLimit(s, task, bucket); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
@@ -858,7 +868,7 @@ func setTaskBucket(s *xorm.Session, task *Task, originalTask *Task, doCheckBucke
 		task.Done = true
 	}
 
-	return nil
+	return bucket, nil
 }
 
 func calculateDefaultPosition(entityID int64, position float64) float64 {
@@ -867,6 +877,19 @@ func calculateDefaultPosition(entityID int64, position float64) float64 {
 	}
 
 	return position
+}
+
+func getNextTaskIndex(s *xorm.Session, listID int64) (nextIndex int64, err error) {
+	latestTask := &Task{}
+	_, err = s.
+		Where("list_id = ?", listID).
+		OrderBy("`index` desc").
+		Get(latestTask)
+	if err != nil {
+		return 0, err
+	}
+
+	return latestTask.Index + 1, nil
 }
 
 // Create is the implementation to create a list task
@@ -914,22 +937,20 @@ func createTask(s *xorm.Session, t *Task, a web.Auth, updateAssignees bool) (err
 	}
 
 	// Get the default bucket and move the task there
-	err = setTaskBucket(s, t, nil, true)
+	_, err = setTaskBucket(s, t, nil, true)
 	if err != nil {
 		return
 	}
 
 	// Get the index for this task
-	latestTask := &Task{}
-	_, err = s.Where("list_id = ?", t.ListID).OrderBy("id desc").Get(latestTask)
+	t.Index, err = getNextTaskIndex(s, t.ListID)
 	if err != nil {
 		return err
 	}
 
-	t.Index = latestTask.Index + 1
 	// If no position was supplied, set a default one
-	t.Position = calculateDefaultPosition(latestTask.ID+1, t.Position)
-	t.KanbanPosition = calculateDefaultPosition(latestTask.ID+1, t.KanbanPosition)
+	t.Position = calculateDefaultPosition(t.Index, t.Position)
+	t.KanbanPosition = calculateDefaultPosition(t.Index, t.KanbanPosition)
 	if _, err = s.Insert(t); err != nil {
 		return err
 	}
@@ -1007,12 +1028,20 @@ func (t *Task) Update(s *xorm.Session, a web.Auth) (err error) {
 		ot.Reminders[i] = r.Reminder
 	}
 
-	// When a repeating task is marked as done, we update all deadlines and reminders and set it as undone
-	updateDone(&ot, t)
-
-	if err := setTaskBucket(s, t, &ot, t.BucketID != ot.BucketID); err != nil {
+	targetBucket, err := setTaskBucket(s, t, &ot, t.BucketID != 0 && t.BucketID != ot.BucketID)
+	if err != nil {
 		return err
 	}
+
+	// If the task was moved into the done bucket and the task has a repeating cycle we should not update
+	// the bucket.
+	if targetBucket.IsDoneBucket && t.RepeatAfter > 0 {
+		t.Done = true // This will trigger the correct re-scheduling of the task (happening in updateDone later)
+		t.BucketID = ot.BucketID
+	}
+
+	// When a repeating task is marked as done, we update all deadlines and reminders and set it as undone
+	updateDone(&ot, t)
 
 	// Update the assignees
 	if err := ot.updateTaskAssignees(s, t.Assignees, a); err != nil {
@@ -1047,13 +1076,10 @@ func (t *Task) Update(s *xorm.Session, a web.Auth) (err error) {
 
 	// If the task is being moved between lists, make sure to move the bucket + index as well
 	if t.ListID != 0 && ot.ListID != t.ListID {
-		latestTask := &Task{}
-		_, err = s.Where("list_id = ?", t.ListID).OrderBy("id desc").Get(latestTask)
+		t.Index, err = getNextTaskIndex(s, t.ListID)
 		if err != nil {
 			return err
 		}
-
-		t.Index = latestTask.Index + 1
 		colsToUpdate = append(colsToUpdate, "index")
 	}
 
@@ -1356,7 +1382,7 @@ func setTaskDatesFromCurrentDateRepeat(oldTask, newTask *Task) {
 
 // This helper function updates the reminders, doneAt, start and end dates of the *old* task
 // and saves the new values in the newTask object.
-// We make a few assumtions here:
+// We make a few assumptions here:
 //  1. Everything in oldTask is the truth - we figure out if we update anything at all if oldTask.RepeatAfter has a value > 0
 //  2. Because of 1., this functions should not be used to update values other than Done in the same go
 func updateDone(oldTask *Task, newTask *Task) {
@@ -1392,8 +1418,14 @@ func (t *Task) updateReminders(s *xorm.Session, reminders []time.Time) (err erro
 		return
 	}
 
+	// Resolve duplicates and sort them
+	reminderMap := make(map[string]time.Time, len(reminders))
+	for _, reminder := range reminders {
+		reminderMap[reminder.UTC().String()] = reminder
+	}
+
 	// Loop through all reminders and add them
-	for _, r := range reminders {
+	for _, r := range reminderMap {
 		_, err = s.Insert(&TaskReminder{TaskID: t.ID, Reminder: r})
 		if err != nil {
 			return err

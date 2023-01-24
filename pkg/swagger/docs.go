@@ -95,7 +95,7 @@ const docTemplate = `{
                     {
                         "type": "integer",
                         "description": "Unsplash Image ID",
-                        "name": "thumb",
+                        "name": "image",
                         "in": "path",
                         "required": true
                     }
@@ -141,7 +141,7 @@ const docTemplate = `{
                     {
                         "type": "integer",
                         "description": "Unsplash Image ID",
-                        "name": "thumb",
+                        "name": "image",
                         "in": "path",
                         "required": true
                     }
@@ -3061,113 +3061,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/migration/wunderlist/auth": {
-            "get": {
-                "security": [
-                    {
-                        "JWTKeyAuth": []
-                    }
-                ],
-                "description": "Returns the auth url where the user needs to get its auth code. This code can then be used to migrate everything from wunderlist to Vikunja.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "migration"
-                ],
-                "summary": "Get the auth url from wunderlist",
-                "responses": {
-                    "200": {
-                        "description": "The auth url.",
-                        "schema": {
-                            "$ref": "#/definitions/handler.AuthURL"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/models.Message"
-                        }
-                    }
-                }
-            }
-        },
-        "/migration/wunderlist/migrate": {
-            "post": {
-                "security": [
-                    {
-                        "JWTKeyAuth": []
-                    }
-                ],
-                "description": "Migrates all folders, lists, tasks, notes, reminders, subtasks and files from wunderlist to vikunja.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "migration"
-                ],
-                "summary": "Migrate all lists, tasks etc. from wunderlist",
-                "parameters": [
-                    {
-                        "description": "The auth code previously obtained from the auth url. See the docs for /migration/wunderlist/auth.",
-                        "name": "migrationCode",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/wunderlist.Migration"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "A message telling you everything was migrated successfully.",
-                        "schema": {
-                            "$ref": "#/definitions/models.Message"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/models.Message"
-                        }
-                    }
-                }
-            }
-        },
-        "/migration/wunderlist/status": {
-            "get": {
-                "security": [
-                    {
-                        "JWTKeyAuth": []
-                    }
-                ],
-                "description": "Returns if the current user already did the migation or not. This is useful to show a confirmation message in the frontend if the user is trying to do the same migration again.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "migration"
-                ],
-                "summary": "Get migration status",
-                "responses": {
-                    "200": {
-                        "description": "The migration status",
-                        "schema": {
-                            "$ref": "#/definitions/migration.Status"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/models.Message"
-                        }
-                    }
-                }
-            }
-        },
         "/namespace/{id}": {
             "post": {
                 "security": [
@@ -5688,7 +5581,7 @@ const docTemplate = `{
                     {
                         "type": "integer",
                         "description": "The id of the other task.",
-                        "name": "otherTaskID",
+                        "name": "otherTaskId",
                         "in": "path",
                         "required": true
                     }
@@ -7727,36 +7620,11 @@ const docTemplate = `{
                 },
                 "created_by": {
                     "description": "The user who initially created the bucket.",
-                    "$ref": "#/definitions/user.User"
-                },
-                "filter_by": {
-                    "description": "The field name of the field to filter by",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "filter_comparator": {
-                    "description": "The comparator for field and value",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "filter_concat": {
-                    "description": "The way all filter conditions are concatenated together, can be either \"and\" or \"or\".,",
-                    "type": "string"
-                },
-                "filter_include_nulls": {
-                    "description": "If set to true, the result will also include null values",
-                    "type": "boolean"
-                },
-                "filter_value": {
-                    "description": "The value of the field name to filter by",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/user.User"
+                        }
+                    ]
                 },
                 "id": {
                     "description": "The unique, numeric id of this bucket.",
@@ -7775,23 +7643,9 @@ const docTemplate = `{
                     "description": "The list this bucket belongs to.",
                     "type": "integer"
                 },
-                "order_by": {
-                    "description": "The query parameter to order the items by. This can be either asc or desc, with asc being the default.",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
                 "position": {
                     "description": "The position this bucket has when querying all buckets. See the tasks.position property on how to use this.",
                     "type": "number"
-                },
-                "sort_by": {
-                    "description": "The query parameter to sort by. This is for ex. done, priority, etc.",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
                 },
                 "tasks": {
                     "description": "All tasks which belong to this bucket.",
@@ -7808,9 +7662,7 @@ const docTemplate = `{
                 "updated": {
                     "description": "A timestamp when this bucket was last updated. You cannot change this value.",
                     "type": "string"
-                },
-                "web.CRUDable": {},
-                "web.Rights": {}
+                }
             }
         },
         "models.BulkAssignees": {
@@ -7822,9 +7674,7 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/user.User"
                     }
-                },
-                "web.CRUDable": {},
-                "web.Rights": {}
+                }
             }
         },
         "models.BulkTask": {
@@ -7858,7 +7708,11 @@ const docTemplate = `{
                 },
                 "created_by": {
                     "description": "The user who initially created the task.",
-                    "$ref": "#/definitions/user.User"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/user.User"
+                        }
+                    ]
                 },
                 "description": {
                     "description": "The task description.",
@@ -7930,7 +7784,11 @@ const docTemplate = `{
                 },
                 "related_tasks": {
                     "description": "All related tasks, grouped by their relation kind",
-                    "$ref": "#/definitions/models.RelatedTaskMap"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.RelatedTaskMap"
+                        }
+                    ]
                 },
                 "reminder_dates": {
                     "description": "An array of datetimes when the user wants to be reminded of the task.",
@@ -7945,7 +7803,11 @@ const docTemplate = `{
                 },
                 "repeat_mode": {
                     "description": "Can have three possible values which will trigger when the task is marked as done: 0 = repeats after the amount specified in repeat_after, 1 = repeats all dates each months (ignoring repeat_after), 3 = repeats from the current date rather than the last set date.",
-                    "type": "integer"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.TaskRepeatMode"
+                        }
+                    ]
                 },
                 "start_date": {
                     "description": "When this task starts.",
@@ -7953,7 +7815,11 @@ const docTemplate = `{
                 },
                 "subscription": {
                     "description": "The subscription status for the user reading this task. You can only read this property, use the subscription endpoints to modify it.\nWill only returned when retreiving one task.",
-                    "$ref": "#/definitions/models.Subscription"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.Subscription"
+                        }
+                    ]
                 },
                 "task_ids": {
                     "description": "A list of task ids to update",
@@ -7970,9 +7836,7 @@ const docTemplate = `{
                 "updated": {
                     "description": "A timestamp when this task was last updated. You cannot change this value.",
                     "type": "string"
-                },
-                "web.CRUDable": {},
-                "web.Rights": {}
+                }
             }
         },
         "models.DatabaseNotifications": {
@@ -8000,9 +7864,7 @@ const docTemplate = `{
                 "read_at": {
                     "description": "When this notification is marked as read, this will be updated with the current timestamp.",
                     "type": "string"
-                },
-                "web.CRUDable": {},
-                "web.Rights": {}
+                }
             }
         },
         "models.Label": {
@@ -8014,7 +7876,11 @@ const docTemplate = `{
                 },
                 "created_by": {
                     "description": "The user who created this label",
-                    "$ref": "#/definitions/user.User"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/user.User"
+                        }
+                    ]
                 },
                 "description": {
                     "description": "The label description.",
@@ -8038,9 +7904,7 @@ const docTemplate = `{
                 "updated": {
                     "description": "A timestamp when this label was last updated. You cannot change this value.",
                     "type": "string"
-                },
-                "web.CRUDable": {},
-                "web.Rights": {}
+                }
             }
         },
         "models.LabelTask": {
@@ -8053,9 +7917,7 @@ const docTemplate = `{
                 "label_id": {
                     "description": "The label id you want to associate with a task.",
                     "type": "integer"
-                },
-                "web.CRUDable": {},
-                "web.Rights": {}
+                }
             }
         },
         "models.LabelTaskBulk": {
@@ -8067,9 +7929,7 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/models.Label"
                     }
-                },
-                "web.CRUDable": {},
-                "web.Rights": {}
+                }
             }
         },
         "models.LinkSharing": {
@@ -8097,26 +7957,36 @@ const docTemplate = `{
                 },
                 "right": {
                     "description": "The right this list is shared with. 0 = Read only, 1 = Read \u0026 Write, 2 = Admin. See the docs for more details.",
-                    "type": "integer",
                     "default": 0,
-                    "maximum": 2
+                    "maximum": 2,
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.Right"
+                        }
+                    ]
                 },
                 "shared_by": {
                     "description": "The user who shared this list",
-                    "$ref": "#/definitions/user.User"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/user.User"
+                        }
+                    ]
                 },
                 "sharing_type": {
                     "description": "The kind of this link. 0 = undefined, 1 = without password, 2 = with password.",
-                    "type": "integer",
                     "default": 0,
-                    "maximum": 2
+                    "maximum": 2,
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.SharingType"
+                        }
+                    ]
                 },
                 "updated": {
                     "description": "A timestamp when this share was last updated. You cannot change this value.",
                     "type": "string"
-                },
-                "web.CRUDable": {},
-                "web.Rights": {}
+                }
             }
         },
         "models.List": {
@@ -8165,7 +8035,11 @@ const docTemplate = `{
                 },
                 "owner": {
                     "description": "The user who created this list.",
-                    "$ref": "#/definitions/user.User"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/user.User"
+                        }
+                    ]
                 },
                 "position": {
                     "description": "The position this list has when querying all lists. See the tasks.position property on how to use this.",
@@ -8173,7 +8047,11 @@ const docTemplate = `{
                 },
                 "subscription": {
                     "description": "The subscription status for the user reading this list. You can only read this property, use the subscription endpoints to modify it.\nWill only returned when retreiving one list.",
-                    "$ref": "#/definitions/models.Subscription"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.Subscription"
+                        }
+                    ]
                 },
                 "title": {
                     "description": "The title of the list. You'll see this in the namespace overview.",
@@ -8184,9 +8062,7 @@ const docTemplate = `{
                 "updated": {
                     "description": "A timestamp when this list was last updated. You cannot change this value.",
                     "type": "string"
-                },
-                "web.CRUDable": {},
-                "web.Rights": {}
+                }
             }
         },
         "models.ListDuplicate": {
@@ -8194,14 +8070,16 @@ const docTemplate = `{
             "properties": {
                 "list": {
                     "description": "The copied list",
-                    "$ref": "#/definitions/models.List"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.List"
+                        }
+                    ]
                 },
                 "namespace_id": {
                     "description": "The target namespace ID",
                     "type": "integer"
-                },
-                "web.CRUDable": {},
-                "web.Rights": {}
+                }
             }
         },
         "models.ListUser": {
@@ -8217,9 +8095,13 @@ const docTemplate = `{
                 },
                 "right": {
                     "description": "The right this user has. 0 = Read only, 1 = Read \u0026 Write, 2 = Admin. See the docs for more details.",
-                    "type": "integer",
                     "default": 0,
-                    "maximum": 2
+                    "maximum": 2,
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.Right"
+                        }
+                    ]
                 },
                 "updated": {
                     "description": "A timestamp when this relation was last updated. You cannot change this value.",
@@ -8228,9 +8110,7 @@ const docTemplate = `{
                 "user_id": {
                     "description": "The username.",
                     "type": "string"
-                },
-                "web.CRUDable": {},
-                "web.Rights": {}
+                }
             }
         },
         "models.Message": {
@@ -8268,11 +8148,19 @@ const docTemplate = `{
                 },
                 "owner": {
                     "description": "The user who owns this namespace",
-                    "$ref": "#/definitions/user.User"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/user.User"
+                        }
+                    ]
                 },
                 "subscription": {
                     "description": "The subscription status for the user reading this namespace. You can only read this property, use the subscription endpoints to modify it.\nWill only returned when retreiving one namespace.",
-                    "$ref": "#/definitions/models.Subscription"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.Subscription"
+                        }
+                    ]
                 },
                 "title": {
                     "description": "The name of this namespace.",
@@ -8283,9 +8171,7 @@ const docTemplate = `{
                 "updated": {
                     "description": "A timestamp when this namespace was last updated. You cannot change this value.",
                     "type": "string"
-                },
-                "web.CRUDable": {},
-                "web.Rights": {}
+                }
             }
         },
         "models.NamespaceUser": {
@@ -8301,9 +8187,13 @@ const docTemplate = `{
                 },
                 "right": {
                     "description": "The right this user has. 0 = Read only, 1 = Read \u0026 Write, 2 = Admin. See the docs for more details.",
-                    "type": "integer",
                     "default": 0,
-                    "maximum": 2
+                    "maximum": 2,
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.Right"
+                        }
+                    ]
                 },
                 "updated": {
                     "description": "A timestamp when this relation was last updated. You cannot change this value.",
@@ -8312,9 +8202,7 @@ const docTemplate = `{
                 "user_id": {
                     "description": "The username.",
                     "type": "string"
-                },
-                "web.CRUDable": {},
-                "web.Rights": {}
+                }
             }
         },
         "models.NamespaceWithLists": {
@@ -8349,11 +8237,19 @@ const docTemplate = `{
                 },
                 "owner": {
                     "description": "The user who owns this namespace",
-                    "$ref": "#/definitions/user.User"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/user.User"
+                        }
+                    ]
                 },
                 "subscription": {
                     "description": "The subscription status for the user reading this namespace. You can only read this property, use the subscription endpoints to modify it.\nWill only returned when retreiving one namespace.",
-                    "$ref": "#/definitions/models.Subscription"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.Subscription"
+                        }
+                    ]
                 },
                 "title": {
                     "description": "The name of this namespace.",
@@ -8364,9 +8260,7 @@ const docTemplate = `{
                 "updated": {
                     "description": "A timestamp when this namespace was last updated. You cannot change this value.",
                     "type": "string"
-                },
-                "web.CRUDable": {},
-                "web.Rights": {}
+                }
             }
         },
         "models.RelatedTaskMap": {
@@ -8377,6 +8271,50 @@ const docTemplate = `{
                     "$ref": "#/definitions/models.Task"
                 }
             }
+        },
+        "models.RelationKind": {
+            "type": "string",
+            "enum": [
+                "unknown",
+                "subtask",
+                "parenttask",
+                "related",
+                "duplicateof",
+                "duplicates",
+                "blocking",
+                "blocked",
+                "precedes",
+                "follows",
+                "copiedfrom",
+                "copiedto"
+            ],
+            "x-enum-varnames": [
+                "RelationKindUnknown",
+                "RelationKindSubtask",
+                "RelationKindParenttask",
+                "RelationKindRelated",
+                "RelationKindDuplicateOf",
+                "RelationKindDuplicates",
+                "RelationKindBlocking",
+                "RelationKindBlocked",
+                "RelationKindPreceeds",
+                "RelationKindFollows",
+                "RelationKindCopiedFrom",
+                "RelationKindCopiedTo"
+            ]
+        },
+        "models.Right": {
+            "type": "integer",
+            "enum": [
+                0,
+                1,
+                2
+            ],
+            "x-enum-varnames": [
+                "RightRead",
+                "RightWrite",
+                "RightAdmin"
+            ]
         },
         "models.SavedFilter": {
             "type": "object",
@@ -8391,7 +8329,11 @@ const docTemplate = `{
                 },
                 "filters": {
                     "description": "The actual filters this filter contains",
-                    "$ref": "#/definitions/models.TaskCollection"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.TaskCollection"
+                        }
+                    ]
                 },
                 "id": {
                     "description": "The unique numeric id of this saved filter",
@@ -8403,7 +8345,11 @@ const docTemplate = `{
                 },
                 "owner": {
                     "description": "The user who owns this filter",
-                    "$ref": "#/definitions/user.User"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/user.User"
+                        }
+                    ]
                 },
                 "title": {
                     "description": "The title of the filter.",
@@ -8414,10 +8360,21 @@ const docTemplate = `{
                 "updated": {
                     "description": "A timestamp when this filter was last updated. You cannot change this value.",
                     "type": "string"
-                },
-                "web.CRUDable": {},
-                "web.Rights": {}
+                }
             }
+        },
+        "models.SharingType": {
+            "type": "integer",
+            "enum": [
+                0,
+                1,
+                2
+            ],
+            "x-enum-varnames": [
+                "SharingTypeUnknown",
+                "SharingTypeWithoutPassword",
+                "SharingTypeWithPassword"
+            ]
         },
         "models.Subscription": {
             "type": "object",
@@ -8439,10 +8396,12 @@ const docTemplate = `{
                 },
                 "user": {
                     "description": "The user who made this subscription",
-                    "$ref": "#/definitions/user.User"
-                },
-                "web.CRUDable": {},
-                "web.Rights": {}
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/user.User"
+                        }
+                    ]
+                }
             }
         },
         "models.Task": {
@@ -8476,7 +8435,11 @@ const docTemplate = `{
                 },
                 "created_by": {
                     "description": "The user who initially created the task.",
-                    "$ref": "#/definitions/user.User"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/user.User"
+                        }
+                    ]
                 },
                 "description": {
                     "description": "The task description.",
@@ -8548,7 +8511,11 @@ const docTemplate = `{
                 },
                 "related_tasks": {
                     "description": "All related tasks, grouped by their relation kind",
-                    "$ref": "#/definitions/models.RelatedTaskMap"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.RelatedTaskMap"
+                        }
+                    ]
                 },
                 "reminder_dates": {
                     "description": "An array of datetimes when the user wants to be reminded of the task.",
@@ -8563,7 +8530,11 @@ const docTemplate = `{
                 },
                 "repeat_mode": {
                     "description": "Can have three possible values which will trigger when the task is marked as done: 0 = repeats after the amount specified in repeat_after, 1 = repeats all dates each months (ignoring repeat_after), 3 = repeats from the current date rather than the last set date.",
-                    "type": "integer"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.TaskRepeatMode"
+                        }
+                    ]
                 },
                 "start_date": {
                     "description": "When this task starts.",
@@ -8571,7 +8542,11 @@ const docTemplate = `{
                 },
                 "subscription": {
                     "description": "The subscription status for the user reading this task. You can only read this property, use the subscription endpoints to modify it.\nWill only returned when retreiving one task.",
-                    "$ref": "#/definitions/models.Subscription"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.Subscription"
+                        }
+                    ]
                 },
                 "title": {
                     "description": "The task text. This is what you'll see in the list.",
@@ -8581,9 +8556,7 @@ const docTemplate = `{
                 "updated": {
                     "description": "A timestamp when this task was last updated. You cannot change this value.",
                     "type": "string"
-                },
-                "web.CRUDable": {},
-                "web.Rights": {}
+                }
             }
         },
         "models.TaskAssginee": {
@@ -8594,9 +8567,7 @@ const docTemplate = `{
                 },
                 "user_id": {
                     "type": "integer"
-                },
-                "web.CRUDable": {},
-                "web.Rights": {}
+                }
             }
         },
         "models.TaskAttachment": {
@@ -8616,9 +8587,7 @@ const docTemplate = `{
                 },
                 "task_id": {
                     "type": "integer"
-                },
-                "web.CRUDable": {},
-                "web.Rights": {}
+                }
             }
         },
         "models.TaskCollection": {
@@ -8666,9 +8635,7 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
-                },
-                "web.CRUDable": {},
-                "web.Rights": {}
+                }
             }
         },
         "models.TaskComment": {
@@ -8688,9 +8655,7 @@ const docTemplate = `{
                 },
                 "updated": {
                     "type": "string"
-                },
-                "web.CRUDable": {},
-                "web.Rights": {}
+                }
             }
         },
         "models.TaskRelation": {
@@ -8702,7 +8667,11 @@ const docTemplate = `{
                 },
                 "created_by": {
                     "description": "The user who created this relation",
-                    "$ref": "#/definitions/user.User"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/user.User"
+                        }
+                    ]
                 },
                 "other_task_id": {
                     "description": "The ID of the other task, the task which is being related.",
@@ -8710,15 +8679,30 @@ const docTemplate = `{
                 },
                 "relation_kind": {
                     "description": "The kind of the relation.",
-                    "type": "string"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.RelationKind"
+                        }
+                    ]
                 },
                 "task_id": {
                     "description": "The ID of the \"base\" task, the task which has a relation to another.",
                     "type": "integer"
-                },
-                "web.CRUDable": {},
-                "web.Rights": {}
+                }
             }
+        },
+        "models.TaskRepeatMode": {
+            "type": "integer",
+            "enum": [
+                0,
+                1,
+                2
+            ],
+            "x-enum-varnames": [
+                "TaskRepeatModeDefault",
+                "TaskRepeatModeMonth",
+                "TaskRepeatModeFromCurrentDate"
+            ]
         },
         "models.Team": {
             "type": "object",
@@ -8729,7 +8713,11 @@ const docTemplate = `{
                 },
                 "created_by": {
                     "description": "The user who created this team.",
-                    "$ref": "#/definitions/user.User"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/user.User"
+                        }
+                    ]
                 },
                 "description": {
                     "description": "The team's description.",
@@ -8755,9 +8743,7 @@ const docTemplate = `{
                 "updated": {
                     "description": "A timestamp when this relation was last updated. You cannot change this value.",
                     "type": "string"
-                },
-                "web.CRUDable": {},
-                "web.Rights": {}
+                }
             }
         },
         "models.TeamList": {
@@ -8773,9 +8759,13 @@ const docTemplate = `{
                 },
                 "right": {
                     "description": "The right this team has. 0 = Read only, 1 = Read \u0026 Write, 2 = Admin. See the docs for more details.",
-                    "type": "integer",
                     "default": 0,
-                    "maximum": 2
+                    "maximum": 2,
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.Right"
+                        }
+                    ]
                 },
                 "team_id": {
                     "description": "The team id.",
@@ -8784,9 +8774,7 @@ const docTemplate = `{
                 "updated": {
                     "description": "A timestamp when this relation was last updated. You cannot change this value.",
                     "type": "string"
-                },
-                "web.CRUDable": {},
-                "web.Rights": {}
+                }
             }
         },
         "models.TeamMember": {
@@ -8807,9 +8795,7 @@ const docTemplate = `{
                 "username": {
                     "description": "The username of the member. We use this to prevent automated user id entering.",
                     "type": "string"
-                },
-                "web.CRUDable": {},
-                "web.Rights": {}
+                }
             }
         },
         "models.TeamNamespace": {
@@ -8825,9 +8811,13 @@ const docTemplate = `{
                 },
                 "right": {
                     "description": "The right this team has. 0 = Read only, 1 = Read \u0026 Write, 2 = Admin. See the docs for more details.",
-                    "type": "integer",
                     "default": 0,
-                    "maximum": 2
+                    "maximum": 2,
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.Right"
+                        }
+                    ]
                 },
                 "team_id": {
                     "description": "The team id.",
@@ -8836,9 +8826,7 @@ const docTemplate = `{
                 "updated": {
                     "description": "A timestamp when this relation was last updated. You cannot change this value.",
                     "type": "string"
-                },
-                "web.CRUDable": {},
-                "web.Rights": {}
+                }
             }
         },
         "models.TeamUser": {
@@ -8874,8 +8862,7 @@ const docTemplate = `{
                     "type": "string",
                     "maxLength": 250,
                     "minLength": 1
-                },
-                "web.Auth": {}
+                }
             }
         },
         "models.TeamWithRight": {
@@ -8887,7 +8874,11 @@ const docTemplate = `{
                 },
                 "created_by": {
                     "description": "The user who created this team.",
-                    "$ref": "#/definitions/user.User"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/user.User"
+                        }
+                    ]
                 },
                 "description": {
                     "description": "The team's description.",
@@ -8911,16 +8902,12 @@ const docTemplate = `{
                     "minLength": 1
                 },
                 "right": {
-                    "description": "The right this team has. 0 = Read only, 1 = Read \u0026 Write, 2 = Admin. See the docs for more details.",
-                    "type": "integer",
-                    "default": 0
+                    "$ref": "#/definitions/models.Right"
                 },
                 "updated": {
                     "description": "A timestamp when this relation was last updated. You cannot change this value.",
                     "type": "string"
-                },
-                "web.CRUDable": {},
-                "web.Rights": {}
+                }
             }
         },
         "models.UserWithRight": {
@@ -8944,9 +8931,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "right": {
-                    "description": "The right this user has. 0 = Read only, 1 = Read \u0026 Write, 2 = Admin. See the docs for more details.",
-                    "type": "integer",
-                    "default": 0
+                    "$ref": "#/definitions/models.Right"
                 },
                 "updated": {
                     "description": "A timestamp when this task was last updated. You cannot change this value.",
@@ -8957,8 +8942,7 @@ const docTemplate = `{
                     "type": "string",
                     "maxLength": 250,
                     "minLength": 1
-                },
-                "web.Auth": {}
+                }
             }
         },
         "notifications.DatabaseNotification": {
@@ -9006,6 +8990,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "key": {
+                    "type": "string"
+                },
+                "logout_url": {
                     "type": "string"
                 },
                 "name": {
@@ -9187,8 +9174,7 @@ const docTemplate = `{
                     "type": "string",
                     "maxLength": 250,
                     "minLength": 1
-                },
-                "web.Auth": {}
+                }
             }
         },
         "v1.LinkShareAuth": {
@@ -9393,15 +9379,6 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "message": {
-                    "type": "string"
-                }
-            }
-        },
-        "wunderlist.Migration": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "description": "Code is the code used to get a user api token",
                     "type": "string"
                 }
             }

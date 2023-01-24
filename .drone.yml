@@ -1,5 +1,6 @@
 ---
 kind: pipeline
+type: docker
 name: testing
 
 workspace:
@@ -111,7 +112,7 @@ steps:
   # compiling the same magefile at the same time. It's also faster if each step does not need to compile it first.
   - name: mage
     image: vikunja/golang-build:latest
-    pull: true
+    pull: always
     environment:
       GOPROXY: 'https://goproxy.kolaente.de'
     commands:
@@ -122,7 +123,7 @@ steps:
 
   - name: build
     image: vikunja/golang-build:latest
-    pull: true
+    pull: always
     environment:
       GOPROXY: 'https://goproxy.kolaente.de'
     depends_on: [ mage ]
@@ -133,7 +134,7 @@ steps:
 
   - name: lint
     image: golang:1.19-alpine
-    pull: true
+    pull: always
     environment:
       GOPROXY: 'https://goproxy.kolaente.de'
     depends_on: [ build ]
@@ -147,7 +148,7 @@ steps:
 
   - name: test-migration-prepare
     image: kolaente/toolbox:latest
-    pull: true
+    pull: always
     commands:
       # Get the latest version
       - wget https://dl.vikunja.io/api/unstable/vikunja-unstable-linux-amd64-full.zip -q -O vikunja-latest.zip
@@ -155,7 +156,7 @@ steps:
 
   - name: test-migration-sqlite
     image: vikunja/golang-build:latest
-    pull: true
+    pull: always
     depends_on: [ test-migration-prepare, build ]
     environment:
       VIKUNJA_DATABASE_TYPE: sqlite
@@ -174,7 +175,7 @@ steps:
 
   - name: test-migration-mysql
     image: vikunja/golang-build:latest
-    pull: true
+    pull: always
     depends_on: [ test-migration-prepare, build ]
     environment:
       VIKUNJA_DATABASE_TYPE: mysql
@@ -193,7 +194,7 @@ steps:
 
   - name: test-migration-psql
     image: vikunja/golang-build:latest
-    pull: true
+    pull: always
     depends_on: [ test-migration-prepare, build ]
     environment:
       VIKUNJA_DATABASE_TYPE: postgres
@@ -213,7 +214,7 @@ steps:
 
   - name: test
     image: vikunja/golang-build:latest
-    pull: true
+    pull: always
     environment:
       GOPROXY: 'https://goproxy.kolaente.de'
     commands:
@@ -224,7 +225,7 @@ steps:
 
   - name: test-sqlite
     image: vikunja/golang-build:latest
-    pull: true
+    pull: always
     environment:
       GOPROXY: 'https://goproxy.kolaente.de'
       VIKUNJA_TESTS_USE_CONFIG: 1
@@ -241,7 +242,7 @@ steps:
 
   - name: test-mysql
     image: vikunja/golang-build:latest
-    pull: true
+    pull: always
     environment:
       GOPROXY: 'https://goproxy.kolaente.de'
       VIKUNJA_TESTS_USE_CONFIG: 1
@@ -258,7 +259,7 @@ steps:
 
   - name: test-postgres
     image: vikunja/golang-build:latest
-    pull: true
+    pull: always
     environment:
       GOPROXY: 'https://goproxy.kolaente.de'
       VIKUNJA_TESTS_USE_CONFIG: 1
@@ -276,7 +277,7 @@ steps:
 
   - name: integration-test
     image: vikunja/golang-build:latest
-    pull: true
+    pull: always
     environment:
       GOPROXY: 'https://goproxy.kolaente.de'
     commands:
@@ -287,7 +288,7 @@ steps:
 
   - name: integration-test-sqlite
     image: vikunja/golang-build:latest
-    pull: true
+    pull: always
     environment:
       GOPROXY: 'https://goproxy.kolaente.de'
       VIKUNJA_TESTS_USE_CONFIG: 1
@@ -304,7 +305,7 @@ steps:
 
   - name: integration-test-mysql
     image: vikunja/golang-build:latest
-    pull: true
+    pull: always
     environment:
       GOPROXY: 'https://goproxy.kolaente.de'
       VIKUNJA_TESTS_USE_CONFIG: 1
@@ -321,7 +322,7 @@ steps:
 
   - name: integration-test-postgres
     image: vikunja/golang-build:latest
-    pull: true
+    pull: always
     environment:
       GOPROXY: 'https://goproxy.kolaente.de'
       VIKUNJA_TESTS_USE_CONFIG: 1
@@ -343,14 +344,15 @@ steps:
 ########
 
 kind: pipeline
+type: docker
 name: release
 
 depends_on:
   - testing
 
 workspace:
-  base: /go
-  path: src/code.vikunja.io/api
+  base: /source
+  path: /
 
 trigger:
   ref:
@@ -368,7 +370,7 @@ steps:
   # compiling the same magefile at the same time. It's also faster if each step does not need to compile it first.
   - name: mage
     image: vikunja/golang-build:latest
-    pull: true
+    pull: always
     environment:
       GOPROXY: 'https://goproxy.kolaente.de'
     commands:
@@ -378,7 +380,7 @@ steps:
 
   - name: before-static-build
     image: techknowlogick/xgo:latest
-    pull: true
+    pull: always
     commands:
       - export PATH=$PATH:$GOPATH/bin
       - go install github.com/magefile/mage
@@ -387,7 +389,7 @@ steps:
 
   - name: static-build-windows
     image: techknowlogick/xgo:latest
-    pull: true
+    pull: always
     environment:
       # This path does not exist. However, when we set the gopath to /go, the build fails. Not sure why.
       # Leaving this here until we know how to resolve this properly.
@@ -400,7 +402,7 @@ steps:
 
   - name: static-build-linux
     image: techknowlogick/xgo:latest
-    pull: true
+    pull: always
     environment:
       # This path does not exist. However, when we set the gopath to /go, the build fails. Not sure why.
       # Leaving this here until we know how to resolve this properly.
@@ -413,7 +415,7 @@ steps:
 
   - name: static-build-darwin
     image: techknowlogick/xgo:latest
-    pull: true
+    pull: always
     environment:
       # This path does not exist. However, when we set the gopath to /go, the build fails. Not sure why.
       # Leaving this here until we know how to resolve this properly.
@@ -426,7 +428,7 @@ steps:
 
   - name: after-build-compress
     image: kolaente/upx
-    pull: true
+    pull: always
     depends_on:
       - static-build-windows
       - static-build-linux
@@ -436,7 +438,7 @@ steps:
 
   - name: after-build-static
     image: techknowlogick/xgo:latest
-    pull: true
+    pull: always
     depends_on:
       - after-build-compress
     commands:
@@ -448,7 +450,7 @@ steps:
 
   - name: sign-release
     image: plugins/gpgsign:1
-    pull: true
+    pull: always
     depends_on: [ after-build-static ]
     settings:
       key:
@@ -462,7 +464,7 @@ steps:
   # Push the releases to our pseudo-s3-bucket
   - name: release-latest
     image: plugins/s3
-    pull: true
+    pull: always
     settings:
       bucket: vikunja-releases
       access_key:
@@ -484,7 +486,7 @@ steps:
 
   - name: release-version
     image: plugins/s3
-    pull: true
+    pull: always
     settings:
       bucket: vikunja-releases
       access_key:
@@ -504,8 +506,8 @@ steps:
 
   # Build os packages and push it to our bucket
   - name: build-os-packages-unstable
-    image: goreleaser/nfpm
-    pull: true
+    image: goreleaser/nfpm:v2.23.0
+    pull: always
     commands:
       - apk add git go
       - ./mage-static release:packages
@@ -517,11 +519,11 @@ steps:
         - main
       event:
         - push
-    depends_on: [ static-build-linux ]
+    depends_on: [ after-build-compress ]
 
   - name: build-os-packages-version
-    image: goreleaser/nfpm
-    pull: true
+    image: goreleaser/nfpm:v2.23.0
+    pull: always
     commands:
       - apk add git go
       - ./mage-static release:packages
@@ -531,12 +533,12 @@ steps:
     when:
       event:
         - tag
-    depends_on: [ static-build-linux ]
+    depends_on: [ after-build-compress ]
 
   # Push the os releases to our pseudo-s3-bucket
   - name: release-os-latest
     image: plugins/s3
-    pull: true
+    pull: always
     settings:
       bucket: vikunja-releases
       access_key:
@@ -558,7 +560,7 @@ steps:
 
   - name: release-os-version
     image: plugins/s3
-    pull: true
+    pull: always
     settings:
       bucket: vikunja-releases
       access_key:
@@ -578,6 +580,7 @@ steps:
 
 ---
 kind: pipeline
+type: docker
 name: deploy-docs
 
 workspace:
@@ -596,8 +599,7 @@ trigger:
 steps:
   - name: theme
     image: kolaente/toolbox
-    pull: true
-    group: build-static
+    pull: always
     commands:
       - mkdir docs/themes/vikunja -p
       - cd docs/themes/vikunja
@@ -605,8 +607,8 @@ steps:
       - tar -xzf vikunja-theme.tar.gz
 
   - name: build
-    image: klakegg/hugo:0.104.2
-    pull: true
+    image: klakegg/hugo:0.107.0
+    pull: always
     commands:
       - cd docs
       - hugo
@@ -614,7 +616,7 @@ steps:
 
   - name: docker
     image: plugins/docker
-    pull: true
+    pull: always
     settings:
       username:
         from_secret: docker_username
@@ -627,101 +629,10 @@ steps:
 ---
 kind: pipeline
 type: docker
-name: docker-arm-release
+name: docker-release
 
 depends_on:
   - testing
-
-platform:
-  os: linux
-  arch: arm64
-
-trigger:
-  ref:
-    - refs/heads/main
-    - "refs/tags/**"
-
-steps:
-  - name: fetch-tags
-    image: docker:git
-    commands:
-      - git fetch --tags
-
-  - name: docker-arm-unstable
-    image: plugins/docker:linux-arm
-    pull: true
-    settings:
-      username:
-        from_secret: docker_username
-      password:
-        from_secret: docker_password
-      repo: vikunja/api
-      tags: unstable-linux-arm
-      dockerfile: Dockerfile.arm32
-    depends_on: [ fetch-tags ]
-    when:
-      ref:
-        - refs/heads/main
-
-  - name: docker-arm
-    image: plugins/docker:linux-arm
-    pull: true
-    settings:
-      username:
-        from_secret: docker_username
-      password:
-        from_secret: docker_password
-      repo: vikunja/api
-      auto_tag: true
-      auto_tag_suffix: linux-arm
-      dockerfile: Dockerfile.arm32
-    depends_on: [ fetch-tags ]
-    when:
-      ref:
-        - "refs/tags/**"
-
-  - name: docker-arm64-unstable
-    image: plugins/docker:linux-arm64
-    pull: true
-    settings:
-      username:
-        from_secret: docker_username
-      password:
-        from_secret: docker_password
-      repo: vikunja/api
-      tags: unstable-linux-arm64
-    depends_on: [ fetch-tags ]
-    when:
-      ref:
-        - refs/heads/main
-
-  - name: docker-arm64
-    image: plugins/docker:linux-arm64
-    pull: true
-    settings:
-      username:
-        from_secret: docker_username
-      password:
-        from_secret: docker_password
-      repo: vikunja/api
-      auto_tag: true
-      auto_tag_suffix: linux-arm64
-    depends_on: [ fetch-tags ]
-    when:
-      ref:
-        - "refs/tags/**"
-
----
-kind: pipeline
-type: docker
-name: docker-amd64-release
-
-depends_on:
-  - testing
-
-platform:
-  os: linux
-  arch: amd64
 
 trigger:
   ref:
@@ -735,94 +646,54 @@ steps:
       - git fetch --tags
 
   - name: docker-unstable
-    image: plugins/docker:linux-amd64
-    pull: true
-    settings:
-      username:
-        from_secret: docker_username
-      password:
-        from_secret: docker_password
-      repo: vikunja/api
-      tags: unstable-linux-amd64
-    depends_on: [ fetch-tags ]
-    when:
-      ref:
-        - refs/heads/main
-
-  - name: docker
-    image: plugins/docker:linux-amd64
-    pull: true
-    settings:
-      username:
-        from_secret: docker_username
-      password:
-        from_secret: docker_password
-      repo: vikunja/api
-      auto_tag: true
-      auto_tag_suffix: linux-amd64
-    depends_on: [ fetch-tags ]
-    when:
-      ref:
-        - "refs/tags/**"
-
----
-kind: pipeline
-type: docker
-name: docker-manifest
-
-trigger:
-  ref:
-    - refs/heads/main
-    - "refs/tags/**"
-
-depends_on:
-  - docker-amd64-release
-  - docker-arm-release
-
-steps:
-  - name: manifest-unstable
+    image: thegeeklab/drone-docker-buildx
+    privileged: true
     pull: always
-    image: plugins/manifest
     settings:
+      username:
+        from_secret: docker_username
+      password:
+        from_secret: docker_password
+      repo: vikunja/api
       tags: unstable
-      ignore_missing: true
-      spec: docker-manifest-unstable.tmpl
-      password:
-        from_secret: docker_password
-      username:
-        from_secret: docker_username
+      platforms:
+        - linux/386
+        - linux/amd64
+        - linux/arm/v6
+        - linux/arm/v7
+        - linux/arm64/v8
+    depends_on: [ fetch-tags ]
     when:
       ref:
         - refs/heads/main
 
-  - name: manifest-release
-    pull: always
-    image: plugins/manifest
-    settings:
-      auto_tag: true
-      ignore_missing: true
-      spec: docker-manifest.tmpl
-      password:
-        from_secret: docker_password
-      username:
-        from_secret: docker_username
+  - name: generate-tags
+    image: thegeeklab/docker-autotag
+    environment:
+      DOCKER_AUTOTAG_VERSION: ${DRONE_TAG}
+      DOCKER_AUTOTAG_EXTRA_TAGS: latest
+    depends_on: [ fetch-tags ]
     when:
       ref:
         - "refs/tags/**"
 
-  - name: manifest-release-latest
+  - name: docker-release
+    image: thegeeklab/drone-docker-buildx
+    privileged: true
     pull: always
-    image: plugins/manifest
-    depends_on:
-      - clone
     settings:
-      tags: latest
-      ignore_missing: true
-      spec: docker-manifest.tmpl
-      password:
-        from_secret: docker_password
       username:
         from_secret: docker_username
+      password:
+        from_secret: docker_password
+      repo: vikunja/api
+      platforms:
+        - linux/386
+        - linux/amd64
+        - linux/arm/v6
+        - linux/arm/v7
+        - linux/arm64/v8
+    depends_on: [ generate-tags ]
     when:
       ref:
         - "refs/tags/**"
@@ -841,9 +712,7 @@ depends_on:
   - testing
   - release
   - deploy-docs
-  - docker-arm-release
-  - docker-amd64-release
-  - docker-manifest
+  - docker-release
 
 steps:
   - name: notify
@@ -861,6 +730,6 @@ steps:
         - failure
 ---
 kind: signature
-hmac: 5500acb776acae4975592637767035c45af277f1f56c8d10ffd99f38761cd5c8
+hmac: ede99d3c09466ea04c070a3cf75b454a232c42e2a46a5c5835135267d50a48e7
 
 ...

@@ -22,7 +22,8 @@ import (
 	"strings"
 	"time"
 
-	"code.vikunja.io/api/pkg/config"
+	"code.vikunja.io/api/pkg/models"
+
 	"code.vikunja.io/api/pkg/user"
 	"code.vikunja.io/api/pkg/utils"
 )
@@ -58,10 +59,12 @@ type Todo struct {
 	RelatedToUID string
 	Color        string
 
-	Start    time.Time
-	End      time.Time
-	DueDate  time.Time
-	Duration time.Duration
+	Start       time.Time
+	End         time.Time
+	DueDate     time.Time
+	Duration    time.Duration
+	RepeatAfter int64
+	RepeatMode  models.TaskRepeatMode
 
 	Created time.Time
 	Updated time.Time // last-mod
@@ -226,6 +229,16 @@ CREATED:` + makeCalDavTimeFromTimeStamp(t.Created)
 PRIORITY:` + strconv.Itoa(mapPriorityToCaldav(t.Priority))
 		}
 
+		if t.RepeatAfter > 0 || t.RepeatMode == models.TaskRepeatModeMonth {
+			if t.RepeatMode == models.TaskRepeatModeMonth {
+				caldavtodos += `
+RRULE:FREQ=MONTHLY;BYMONTHDAY=` + t.DueDate.Format("02") // Day of the month
+			} else {
+				caldavtodos += `
+RRULE:FREQ=SECONDLY;INTERVAL=` + strconv.FormatInt(t.RepeatAfter, 10)
+			}
+		}
+
 		caldavtodos += `
 LAST-MODIFIED:` + makeCalDavTimeFromTimeStamp(t.Updated)
 
@@ -240,7 +253,7 @@ END:VCALENDAR` // Need a line break
 }
 
 func makeCalDavTimeFromTimeStamp(ts time.Time) (caldavtime string) {
-	return ts.In(config.GetTimeZone()).Format(DateFormat)
+	return ts.In(time.UTC).Format(DateFormat) + "Z"
 }
 
 func calcAlarmDateFromReminder(eventStart, reminder time.Time) (alarmTime string) {

@@ -37,7 +37,9 @@ func getUndoneOverdueTasks(s *xorm.Session, now time.Time) (usersWithTasks map[i
 
 	var tasks []*Task
 	err = s.
-		Where("due_date is not null and due_date < ?", nextMinute.Add(time.Hour*14).Format(dbTimeFormat)).
+		Where("due_date is not null AND due_date < ? AND lists.is_archived = false AND namespaces.is_archived = false", nextMinute.Add(time.Hour*14).Format(dbTimeFormat)).
+		Join("LEFT", "lists", "lists.id = tasks.list_id").
+		Join("LEFT", "namespaces", "lists.namespace_id = namespaces.id").
 		And("done = false").
 		Find(&tasks)
 	if err != nil {
@@ -138,9 +140,13 @@ func RegisterOverdueReminderCron() {
 			}
 
 			if len(ut.tasks) == 1 {
-				n = &UndoneTaskOverdueNotification{
-					User: ut.user,
-					Task: ut.tasks[0],
+				// We know there's only one entry in the map so this is actually O(1) and we can use it to get the
+				// first entry without knowing the key of it.
+				for _, t := range ut.tasks {
+					n = &UndoneTaskOverdueNotification{
+						User: ut.user,
+						Task: t,
+					}
 				}
 			}
 
