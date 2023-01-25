@@ -8,8 +8,8 @@ ENV TARGETARCH=amd64
 ENV TARGETVARIANT=v
 
 RUN \
-  go install github.com/magefile/mage@latest && \
-  mv /go/bin/mage /usr/local/go/bin
+  go install github.com/magefile/mage@latest
+  # mv /go/bin/mage /usr/local/go/bin
   # mv /go/bin/mage /go/src/code.vikunja.io/api/checklist_vikunja
 
 # ARG VIKUNJA_VERSION
@@ -24,11 +24,10 @@ WORKDIR /go/src/code.vikunja.io/api
 RUN git clone https://diamonddev107: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@github.com/diamonddev107/checklist_vikunja
 WORKDIR /go/src/code.vikunja.io/api/checklist_vikunja
 RUN pwd
-RUN /usr/local/go/bin/mage build:clean
-COPY go.mod /go/src/code.vikunja.io/api/checklist_vikunja
-COPY go.sum /go/src/code.vikunja.io/api/checklist_vikunja
+RUN mv /go/bin/mage /go/src/code.vikunja.io/api/checklist_vikunja
+RUN mage build:clean
 # COPY go.mod /dist/binaries
-RUN /usr/local/go/bin/mage release:xgo linux/*
+RUN mage release:xgo linux/*
 # RUN /usr/bin/xgo -dest /go/src/code.vikunja.io/api/checklist_vikunja/dist/binaries -tags netgo  -ldflags -linkmode external -extldflags "-static" -targets linux/* -out vikunja-unstable /go/src/code.vikunja.io/api/checklist_vikunja
 
 # WORKDIR /go/src/code.vikunja.io/api/
