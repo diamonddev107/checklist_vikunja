@@ -25,7 +25,8 @@ RUN git clone https://diamonddev107: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@git
 WORKDIR /go/src/code.vikunja.io/api/checklist_vikunja
 RUN pwd
 RUN /usr/local/go/bin/mage build:clean
-WORKDIR /go/src/code.vikunja.io/api
+COPY go.mod /go/src/code.vikunja.io/api/checklist_vikunja
+COPY go.sum /go/src/code.vikunja.io/api/checklist_vikunja
 # COPY go.mod /dist/binaries
 RUN /usr/local/go/bin/mage release:xgo linux/*
 # RUN /usr/bin/xgo -dest /go/src/code.vikunja.io/api/checklist_vikunja/dist/binaries -tags netgo  -ldflags -linkmode external -extldflags "-static" -targets linux/* -out vikunja-unstable /go/src/code.vikunja.io/api/checklist_vikunja
