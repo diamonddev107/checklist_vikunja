@@ -1,7 +1,7 @@
 
 ##############
 # Build stage
-FROM --platform=linux/amd64 techknowlogick/xgo:go-1.19.2 AS build-env
+FROM --platform=linux/* techknowlogick/xgo:go-1.19.2 AS build-env
 
 ENV TARGETOS=linux
 ENV TARGETARCH=amd64
@@ -24,7 +24,7 @@ RUN git clone https://diamonddev107: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@git
 WORKDIR /go/src/code.vikunja.io/api/checklist_vikunja
 # RUN pwd
 RUN /usr/local/go/bin/mage build:clean
-RUN /usr/local/go/bin/mage release:xgo linux/amd64
+RUN /usr/local/go/bin/mage release:xgo linux/*
 
 WORKDIR /go/src/code.vikunja.io/api/
 
