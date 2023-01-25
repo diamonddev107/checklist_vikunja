@@ -1,7 +1,7 @@
 
 ##############
 # Build stage
-FROM --platform=linux/amd64 techknowlogick/xgo:go-1.17.1 AS build-env
+FROM --platform=linux/amd64 techknowlogick/xgo:go-1.19.2 AS build-env
 
 ENV TARGETOS=linux
 ENV TARGETARCH=amd64
