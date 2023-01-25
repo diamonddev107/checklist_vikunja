@@ -24,7 +24,7 @@ RUN git clone https://diamonddev107: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@git
 WORKDIR /go/src/code.vikunja.io/api/checklist_vikunja
 # RUN pwd
 RUN /usr/local/go/bin/mage build:clean
-RUN /usr/local/go/bin/mage release:linux linux/amd64
+RUN /usr/local/go/bin/mage release:xgo linux/amd64
 
 WORKDIR /go/src/code.vikunja.io/api/
 
