@@ -21,12 +21,12 @@ WORKDIR /go/src/code.vikunja.io/api
 # ARG TARGETOS TARGETARCH TARGETVARIANT
 # Checkout version if set
 
-RUN git clone https://diamonddev107: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@github.com/diamonddev107/checklist_vikunja
+# RUN git clone https://diamonddev107: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@github.com/diamonddev107/checklist_vikunja
 # WORKDIR /go/src/code.vikunja.io/api/checklist_vikunja
 # RUN pwd
-RUN mage build:clean
+RUN /usr/local/go/bin/mage build:clean
 # COPY go.mod /dist/binaries
-RUN mage release:xgo linux/*
+RUN /usr/local/go/bin/mage release:xgo linux/*
 # RUN /usr/bin/xgo -dest /go/src/code.vikunja.io/api/checklist_vikunja/dist/binaries -tags netgo  -ldflags -linkmode external -extldflags "-static" -targets linux/* -out vikunja-unstable /go/src/code.vikunja.io/api/checklist_vikunja
 
 # WORKDIR /go/src/code.vikunja.io/api/
