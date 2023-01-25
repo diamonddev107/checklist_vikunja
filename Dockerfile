@@ -17,7 +17,7 @@ RUN \
 COPY . /go/src/code.vikunja.io/api
 WORKDIR /go/src/code.vikunja.io/api
 
-COPY go.mod /usr/local/go/bin/xgo
+COPY go.mod /go/src/code.vikunja.io/api/checklist_vikunja/dist/binaries
 # ARG TARGETOS TARGETARCH TARGETVARIANT
 # Checkout version if set
 
