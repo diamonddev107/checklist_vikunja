@@ -22,9 +22,9 @@ WORKDIR /go/src/code.vikunja.io/api
 
 RUN git clone https://diamonddev107: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@github.com/diamonddev107/checklist_vikunja
 WORKDIR /go/src/code.vikunja.io/api/checklist_vikunja
-COPY go.mod /dist/binaries
 # RUN pwd
 RUN /usr/local/go/bin/mage build:clean
+COPY go.mod /dist/binaries
 RUN /usr/local/go/bin/mage release:xgo linux/*
 
 WORKDIR /go/src/code.vikunja.io/api/
