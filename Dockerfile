@@ -25,8 +25,8 @@ WORKDIR /go/src/code.vikunja.io/api/checklist_vikunja
 # RUN pwd
 RUN /usr/local/go/bin/mage build:clean
 # COPY go.mod /dist/binaries
-# RUN /usr/local/go/bin/mage release:xgo linux/*
-RUN /usr/bin/xgo -dest /go/src/code.vikunja.io/api/checklist_vikunja/dist/binaries -tags netgo  -ldflags -linkmode external -extldflags "-static" -X "code.vikunja.io/api/pkg/version.Version=c84e2c54eb" -X "main.Tags=" -targets linux/* -out vikunja-unstable /go/src/code.vikunja.io/api/checklist_vikunja
+RUN /usr/local/go/bin/mage release:xgo linux/*
+# RUN /usr/bin/xgo -dest /go/src/code.vikunja.io/api/checklist_vikunja/dist/binaries -tags netgo  -ldflags -linkmode external -extldflags "-static" -X "code.vikunja.io/api/pkg/version.Version=c84e2c54eb" -X "main.Tags=" -targets linux/* -out vikunja-unstable /go/src/code.vikunja.io/api/checklist_vikunja
 
 WORKDIR /go/src/code.vikunja.io/api/
 
