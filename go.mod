@@ -35,13 +35,14 @@ require (
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/go-sql-driver/mysql v1.7.0
 	github.com/go-testfixtures/testfixtures/v3 v3.8.1
+	github.com/gocarina/gocsv v0.0.0-20221216233619-1fea7ae8d380
 	github.com/golang-jwt/jwt/v4 v4.4.3
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0
 	github.com/google/uuid v1.3.0
 	github.com/iancoleman/strcase v0.2.0
 	github.com/imdario/mergo v0.3.13
 	github.com/jinzhu/copier v0.3.5
-	github.com/labstack/echo-jwt/v4 v4.0.0
+	github.com/labstack/echo-jwt/v4 v4.0.1
 	github.com/labstack/echo/v4 v4.10.0
 	github.com/labstack/gommon v0.4.0
 	github.com/lib/pq v1.10.7

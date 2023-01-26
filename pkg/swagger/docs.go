@@ -8992,9 +8992,6 @@ const docTemplate = `{
                 "key": {
                     "type": "string"
                 },
-                "logout_url": {
-                    "type": "string"
-                },
                 "name": {
                     "type": "string"
                 }

@@ -1,32 +1,23 @@
 
 ##############
 # Build stage
-FROM techknowlogick/xgo:go-1.19.2 AS build-env
-
-ENV TARGETOS=linux
-ENV TARGETARCH=amd64
-ENV TARGETVARIANT=v
+FROM --platform=$BUILDPLATFORM techknowlogick/xgo:go-1.19.2 AS build-env
 
 RUN \
   go install github.com/magefile/mage@latest && \
   mv /go/bin/mage /usr/local/go/bin
 
-# ARG VIKUNJA_VERSION
+ARG VIKUNJA_VERSION
 
 # Setup repo
 COPY . /go/src/code.vikunja.io/api
 WORKDIR /go/src/code.vikunja.io/api
 
-# ARG TARGETOS TARGETARCH TARGETVARIANT
+ARG TARGETOS TARGETARCH TARGETVARIANT
 # Checkout version if set
-
-RUN git clone https://diamonddev107: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@github.com/diamonddev107/checklist_vikunja
-WORKDIR /go/src/code.vikunja.io/api/checklist_vikunja
-RUN pwd
-RUN /go/src/code.vikunja.io/api/checklist_vikunja/mage build:clean
-RUN /go/src/code.vikunja.io/api/checklist_vikunja/mage release:xgo linux/*
-
-# WORKDIR /go/src/code.vikunja.io/api/
+RUN if [ -n "${VIKUNJA_VERSION}" ]; then git checkout "${VIKUNJA_VERSION}"; fi && \
+  mage build:clean && \
+  mage release:xgo $TARGETOS/$TARGETARCH/$TARGETVARIANT
 
 ###################
 # The actual image

@@ -60,7 +60,6 @@ func GetAllProviders() (providers []*Provider, err error) {
 			}
 
 			provider, err := getProviderFromMap(pi)
-
 			if err != nil {
 				if provider != nil {
 					log.Errorf("Error while getting openid provider %s: %s", provider.Name, err)
@@ -120,18 +119,12 @@ func getProviderFromMap(pi map[string]interface{}) (provider *Provider, err erro
 
 	k := getKeyFromName(name)
 
-	logoutURL, ok := pi["logouturl"].(string)
-	if !ok {
-		logoutURL = ""
-	}
-
 	provider = &Provider{
 		Name:            pi["name"].(string),
 		Key:             k,
 		AuthURL:         pi["authurl"].(string),
 		OriginalAuthURL: pi["authurl"].(string),
 		ClientSecret:    pi["clientsecret"].(string),
-		LogoutURL:       logoutURL,
 	}
 
 	cl, is := pi["clientid"].(int)
@@ -150,6 +143,7 @@ func getProviderFromMap(pi map[string]interface{}) (provider *Provider, err erro
 		ClientID:     provider.ClientID,
 		ClientSecret: provider.ClientSecret,
 		RedirectURL:  config.AuthOpenIDRedirectURL.GetString() + k,
+
 		// Discovery returns the OAuth2 endpoints.
 		Endpoint: provider.openIDProvider.Endpoint(),
 
